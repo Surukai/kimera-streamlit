@@ -13,17 +13,19 @@ def getWeapons(file :str) -> pd.DataFrame:
 
 
 # Dice functions
-
+@st.cache_data()
 def d(*dice):
     result = 0
     for d in dice:
         result += np.random.randint(low=1, high=d)
     return result
 
+@st.cache_data()
 def d_list(*dice):
     results = [sum(combination) for combination in product(*[range(1, d + 1) for d in dice])]
     return sorted(results)
 
+@st.cache_data()
 def d_df(*dice):
     results = d_list(*dice)
     unique_results = list(set(results))  # Get unique results
@@ -39,8 +41,18 @@ def d_df(*dice):
 # Defaults
 df_hit = d_df(8, 8)
 df_dmg = d_df(8, 8)
-layer1 = {'layer': "Guard", 'coverage': 8, 'protection': 8}
-layer2 = {'layer': "Light armor", 'coverage': 11, 'protection': 3}
+with st.sidebar:
+    l1 = st.container()
+    l2 = st.container()
+    l2.subheader("Layer 2")
+    layer2_coverage = l2.select_slider("L1Coverage", range(20))
+    layer2_protection = l2.select_slider("L1Protection", range(10))
+    l1.subheader("Layer 1")
+    layer1_coverage = l1.select_slider("Coverage", range((layer2_coverage if layer2_coverage > 0 else 2)))
+    layer1_protection = l1.select_slider("Protection", range(10))
+
+layer1 = {'layer': "Guard", 'coverage': layer1_coverage, 'protection': layer1_protection}
+layer2 = {'layer': "Light armor", 'coverage': layer2_coverage, 'protection': layer2_protection}
 df_armor = pd.DataFrame([layer1, layer2])
 #st.write(df_armor)
 
