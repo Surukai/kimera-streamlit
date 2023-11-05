@@ -39,13 +39,13 @@ def d_df(*dice):
 # Defaults
 df_hit = d_df(8, 8)
 df_dmg = d_df(8, 8)
-armor_layer1 = {'layer': "Blocked", 'coverage': 8, 'protection': 8}
-armor_layer2 = {'layer': "Light armor", 'coverage': 11, 'protection': 2}
+armor_layer1 = {'layer': "Reinforced", 'coverage': 2, 'protection': 4}
+armor_layer2 = {'layer': "Light armor", 'coverage': 4, 'protection': 2}
 df_armor = pd.DataFrame([armor_layer1, armor_layer2])
 #st.write(df_armor)
 
 # Attack functions
-def attackMelee(df_hit=df_hit, df_dmg=df_dmg, guard=0, df_armor=df_armor, tough=8):
+def attackMelee(df_hit=df_hit, df_dmg=df_dmg, guard=8, df_armor=df_armor, tough=8):
     #deduct guard from df_hit.result
     df_hit.result -= guard
     fraction_blocked = df_hit[df_hit.result <= 0].fraction.sum()
