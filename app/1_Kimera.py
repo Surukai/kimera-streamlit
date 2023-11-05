@@ -39,16 +39,13 @@ def d_df(*dice):
 # Defaults
 df_hit = d_df(8, 8)
 df_dmg = d_df(8, 8)
-armor_layer1 = {'layer': "Reinforced", 'coverage': 2, 'protection': 4}
-armor_layer2 = {'layer': "Light armor", 'coverage': 4, 'protection': 2}
-df_armor = pd.DataFrame([armor_layer1, armor_layer2])
+layer1 = {'layer': "Guard", 'coverage': 8, 'protection': 8}
+layer2 = {'layer': "Light armor", 'coverage': 11, 'protection': 3}
+df_armor = pd.DataFrame([layer1, layer2])
 #st.write(df_armor)
 
 # Attack functions
-def attackMelee(df_hit=df_hit, df_dmg=df_dmg, guard=8, df_armor=df_armor, tough=8):
-    #deduct guard from df_hit.result
-    df_hit.result -= guard
-    fraction_blocked = df_hit[df_hit.result <= 0].fraction.sum()
+def attackMelee(df_hit=df_hit, df_dmg=df_dmg, df_armor=df_armor, tough=8):
     dict_layer_fractions = {}
     dict_outcome = {}
     last_coverage = 0
@@ -100,30 +97,19 @@ def attackMelee(df_hit=df_hit, df_dmg=df_dmg, guard=8, df_armor=df_armor, tough=
     stopped = df_sum[tough < df_sum['result']]['fraction'].sum()
 
     # print distribution of hits:
-    st.write(f"blocked: {fraction_blocked*100:.2f}%")
     struck_armor = 0
     for key, value in dict_layer_fractions.items():
         st.write(f"struck {key}: {value*100:.2f}%")
         struck_armor += value
     st.write(f"clean: {fraction_clean*100:.2f}%")
-    st.write(f"checksum struck: {(fraction_blocked+struck_armor+fraction_clean)*100:.2f}%")
+    st.write(f"checksum struck: {(struck_armor+fraction_clean)*100:.2f}%")
     st.write("")
 
     # Summarize outcomes:
-    st.write(f"Blocked: {fraction_blocked*100:.2f}%")
     st.write(f"No Stop: {no_stop*100:.2f}%")
     st.write(f"Stopped: {stopped*100:.2f}%")       
-    st.write(f"checksum damage: {(fraction_blocked+no_stop+stopped)*100:.2f}%")
+    st.write(f"checksum damage: {(no_stop+stopped)*100:.2f}%")
 
 # Specific instructions
 st.write("Professional soliders, armed, light armor, mutual combat, one strike:")
 attackMelee()
-
-
-
-# Old tutorial:
-# row = 5
-# cols = 5
-# Random = np.random.randint(low=0, high=100, size=(row, cols))
-# df = pd.DataFrame(Random)
-# st.plotly_chart(px.scatter(df, x=0, y=1))
