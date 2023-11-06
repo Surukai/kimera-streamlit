@@ -21,22 +21,19 @@ def d(*dice):
     return result
 
 @st.cache_data()
-def d_list(*dice):
+def d_list(*dice): # returns a sorted list of all results possible with *dice
     results = [sum(combination) for combination in product(*[range(1, d + 1) for d in dice])]
     return sorted(results)
 
 @st.cache_data()
-def d_df(*dice):
-    results = d_list(*dice)
-    unique_results = list(set(results))  # Get unique results
-    unique_results.sort()
-    counts = [results.count(result) for result in unique_results]
-    total_outcomes = len(results)
-    percentages = [(counts[i] / total_outcomes) for i in range(len(counts))]
-    df = pd.DataFrame({'result': unique_results, 'count': counts, 'fraction': percentages})
+def d_df(*dice): # returns a dataframe with columns (unique)'result', 'count', and 'fraction'
+    list_results = d_list(*dice)
+    list_unique_results = list(set(list_results)) # discard duplicates
+    list_counts = [list_results.count(result) for result in list_unique_results] # count occurance of each unique result
+    total_counts = len(list_results)
+    list_fractions = [(list_counts[i] / total_counts) for i in range(len(list_counts))] # calculate fraction of each unique result
+    df = pd.DataFrame({'result': list_unique_results, 'count': list_counts, 'fraction': list_fractions})
     return df
-
-
 
 # Defaults
 df_hit = d_df(8, 8)
@@ -49,18 +46,27 @@ with st.sidebar:
     layer2_protection = l2.select_slider("L1Protection", range(10))
     l1.subheader("Layer 1")
     layer1_coverage = l1.select_slider("Coverage", range((layer2_coverage if layer2_coverage > 0 else 2)))
-    layer1_protection = l1.select_slider("Protection", range(10))
+    layer1_protection = l1.select_slider("Protection", range(20))
 
-layer1 = {'layer': "Guard", 'coverage': layer1_coverage, 'protection': layer1_protection}
+layer1 = {'layer': "Reinforced", 'coverage': layer1_coverage, 'protection': layer1_protection}
 layer2 = {'layer': "Light armor", 'coverage': layer2_coverage, 'protection': layer2_protection}
 df_armor = pd.DataFrame([layer1, layer2])
 #st.write(df_armor)
 
 # Attack functions
-def attackMelee(df_hit=df_hit, df_dmg=df_dmg, df_armor=df_armor, tough=8):
+def attackMelee(df_hit=df_hit, df_dmg=df_dmg, guard = 8, block = 12, df_armor=df_armor, tough=8):
+
+    # resolve Guard
+    df_hit.result -= guard
+    fraction_guard = df_hit[df_hit.result < 1].fraction.sum()
+    df_dmg_guard = df_dmg.copy()
+    df_dmg_guard['result'] -= block
+    df_dmg_guard['fraction'] = df_dmg_guard['fraction'] * fraction_guard    
+    dict_outcome = {'guard': df_dmg_guard}
+
+    # resolve Armor
     dict_layer_fractions = {}
-    dict_outcome = {}
-    last_coverage = 0
+    last_coverage = 1 # lowest coverage that didn't strike guard
     for row in df_armor.iterrows():
         layer = row[1]['layer']
         coverage = row[1]['coverage']
@@ -99,7 +105,7 @@ def attackMelee(df_hit=df_hit, df_dmg=df_dmg, df_armor=df_armor, tough=8):
         fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='lines', name=key))
 
     # Create vertical dashed lines at 0 and a specific value (e.g., tough)
-    fig.add_shape(go.layout.Shape(type="line", x0=0, x1=0, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='Zero'))
+    fig.add_shape(go.layout.Shape(type="line", x0=1, x1=1, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='Zero'))
     fig.add_shape(go.layout.Shape(type="line", x0=tough, x1=tough, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough Value'))
     # Show the combined plot
     st.plotly_chart(fig)
@@ -110,17 +116,18 @@ def attackMelee(df_hit=df_hit, df_dmg=df_dmg, df_armor=df_armor, tough=8):
 
     # print distribution of hits:
     struck_armor = 0
+    st.write(f"parried (guard): {fraction_guard*100:.2f}%")
     for key, value in dict_layer_fractions.items():
         st.write(f"struck {key}: {value*100:.2f}%")
         struck_armor += value
-    st.write(f"clean: {fraction_clean*100:.2f}%")
-    st.write(f"checksum struck: {(struck_armor+fraction_clean)*100:.2f}%")
+    st.write(f"struck clean: {fraction_clean*100:.2f}%")
+    st.write(f"checksum struck: {(fraction_guard+struck_armor+fraction_clean)*100:.2f}%")
     st.write("")
 
     # Summarize outcomes:
     st.write(f"No Stop: {no_stop*100:.2f}%")
     st.write(f"Stopped: {stopped*100:.2f}%")       
-    st.write(f"checksum damage: {(no_stop+stopped)*100:.2f}%")
+    st.write(f"checksum stoppage: {(no_stop+stopped)*100:.2f}%")
 
 # Specific instructions
 st.write("Professional soliders, armed, light armor, mutual combat, one strike:")
