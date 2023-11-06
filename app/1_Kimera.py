@@ -25,7 +25,7 @@ def d_list(*dice): # returns a sorted list of all results possible with *dice
     results = [sum(combination) for combination in product(*[range(1, d + 1) for d in dice])]
     return sorted(results)
 
-@st.cache_data()
+#@st.cache_data()
 def d_df(*dice): # returns a dataframe with columns (unique)'result', 'count', and 'fraction'
     list_results = d_list(*dice)
     list_unique_results = list(set(list_results)) # discard duplicates
@@ -66,7 +66,7 @@ def attackMelee(df_hit=df_hit, df_dmg=df_dmg, guard = 8, block = 12, df_armor=df
 
     # resolve Armor
     dict_layer_fractions = {}
-    last_coverage = 1 # lowest coverage that didn't strike guard
+    last_coverage = 0 # lowest coverage that struck guard
     for row in df_armor.iterrows():
         layer = row[1]['layer']
         coverage = row[1]['coverage']
