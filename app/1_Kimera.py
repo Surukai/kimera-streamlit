@@ -38,7 +38,8 @@ def d_df(*dice): # returns a dataframe with columns (unique)'result', 'count', a
 # Defaults
 df_hit = d_df(8, 8).rename(columns={'result': 'hit'})
 df_dmg = d_df(8, 8)
-df_crit = d_df(8, 8, 8)
+df_crit = df_dmg.copy()
+df_crit['result'] = df_crit['result'] + 6
 
 # Sidebar
 with st.sidebar:
