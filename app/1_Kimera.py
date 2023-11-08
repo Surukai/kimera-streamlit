@@ -53,12 +53,12 @@ layer2 = {'layer': "armor - Light", 'coverage': 6, 'protection': 2}
 with st.sidebar:
     l1 = st.container()
     l2 = st.container()
+    l1.subheader(layer1['layer'])
+    layer1_coverage = l1.slider("Coverage", 0, 20, layer1['coverage'])
+    layer1_protection = l1.slider("Protection", 0, 20, layer1['protection'])
     l2.subheader(layer2['layer'])
     layer2_coverage = l2.slider("Coverage", 0, 20, layer2['coverage'])
-    layer2_protection = l2.slider("Protection", 0, 10, layer2['protection'])
-    l1.subheader(layer1['layer'])
-    layer1_coverage = l1.slider("Coverage", 0, layer2_coverage, layer1['coverage'])
-    layer1_protection = l1.slider("Protection", 0, 20, layer1['protection'])
+    layer2_protection = l2.slider("Protection", 0, 20, layer2['protection'])
 
 layer1['coverage'] = layer1_coverage
 layer1['protection'] = layer1_protection
@@ -67,121 +67,94 @@ layer2['protection'] = layer2_protection
 df_armor = pd.DataFrame([layer1, layer2])
 
 
-def attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard = None, block = None, ):
-    # TODO: interpret guard argument as melee attack and range argument as ranged
-    # resolve Guard; no crit section as crits by definition cannot strike guard
-    df_hit.hit -= guard
-    dict_fractions = {'guard': df_hit[df_hit.hit < 1].fraction.sum()}
-    df_dmg_guard = df_dmg.copy()
-    df_dmg_guard['result'] -= block
-    df_dmg_guard['fraction'] = df_dmg_guard['fraction'] * dict_fractions['guard']
-    dict_outcome = {'guard': df_dmg_guard}
+def attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=None, block=None, frame=None, cover=None, distance=0, verbose=False):
+    '''
+    df_hit: hit distribution DataFrame with columns 'hit', 'count', and 'fraction'
+    df_dmg: damage distribution DataFrame with columns 'result', 'count', and 'fraction'
+    df_crit: critical damage distribution DataFrame with columns 'result', 'count', and 'fraction'
+    df_armor: armor DataFrame with columns 'layer', 'coverage', and 'protection'
+    guard: for melee attacks. Reduces hit rolls; 0 or lower are blocked
+    block: (two uses) Reduces damage of blocked attacks in melee, and reduces damage of ranged attacks that hit the cover
+    frame: (working name) difficulty to hit with ranged attacks, regardless of cover. The smaller the target, the greater the frame value
+    cover: additional armor layer - the greater of cover value of environment and Stealth attribute
+    distance (in m): if the distance is greater than 50m, the GM can apply a bonus to the frame value
+        this could be as simple as +5 up to 100m, when it beomces +5,
+        or as precise as +1 per 10m over 50m.
+        As a typical frame is 5, the typical penalty would be exactly 1/10 of the distance: 6 at 60m, 7 at 70m, etc (minimum of 5).
+    '''
+    crit_threshold = 9 # results 10 or more are crits
+    melee = bool(frame is None)
 
-    # resolve armor layers
-    last_coverage = 0 # lowest coverage that struck last layer
-    for row in df_armor.iterrows():
-        layer = row[1]['layer']
-        coverage = row[1]['coverage']
-        protection = row[1]['protection']
-        df_hit_layer = df_hit[(df_hit.hit <= coverage) & (last_coverage < df_hit.hit)]
-        armor_hit_fraction = df_hit_layer.fraction.sum()
-        dict_fractions[layer] = armor_hit_fraction
-        df_dmg_layer = df_dmg.copy()
-        if (9 < df_hit_layer.hit.max()): # if any hits on the layer are above 10, calculate crits for this layer
-            # calculate fractions of non-crits and crits
-            layer_nocrit_fraction = df_hit_layer[df_hit_layer.hit < 10].fraction.sum()
-            layer_crit_fraction = df_hit_layer[9 < df_hit_layer.hit].fraction.sum()
-            # apply fractions to damage and crit tables
-            df_dmg_layer['result'] -= protection
-            df_dmg_layer['fraction'] = df_dmg_layer['fraction'] * armor_hit_fraction * layer_nocrit_fraction
-            df_crit_layer = df_crit.copy()
-            df_crit_layer['result'] -= protection
-            df_crit_layer['fraction'] = df_crit_layer['fraction'] * armor_hit_fraction * layer_crit_fraction
-            # merge damage and crit tables
-            merged_df = df_dmg_layer.merge(df_crit_layer, on='result', suffixes=('_dmg', '_crit'), how='outer').fillna(0)
-            # sum 'count' and 'fraction' columns
-            merged_df['count'] = merged_df['count_dmg'] + merged_df['count_crit']
-            merged_df['fraction'] = merged_df['fraction_dmg'] + merged_df['fraction_crit']
-            df_dmg_layer = merged_df[['result', 'count', 'fraction']]
-        else: # calculate regular damage only for this layer
-            df_dmg_layer['result'] -= protection
-            df_dmg_layer['fraction'] = df_dmg_layer['fraction'] * armor_hit_fraction
-        dict_outcome[layer] = df_dmg_layer
-        last_coverage = coverage
+    if verbose:
+        if melee:
+            st.write(f"melee attack {df_hit['hit'].min()}-{df_hit['hit'].max()}, dmg {df_dmg.result.min()}-{df_crit.result.max()} . . . vs . . . guard {guard}, block {block}")
+        else:
+            st.write(f"ranged attack {df_hit['hit'].min()}-{df_hit['hit'].max()}, dmg {df_dmg.result.min()}-{df_crit.result.max()} . . . vs . . . frame {frame}, cover {cover}, block {block}, distance {distance}m")
 
-    # that which didn't strike any armor is "clean"
-    df_dmg_clean = df_dmg.copy()
-    df_hit_clean = df_hit[(df_hit.hit > last_coverage)]
-    dict_fractions['clean'] = df_hit_clean.fraction.sum()
-    if 9 < df_hit_clean.hit.max(): # check for crits:
-        # calculate RELATIVE fractions of non-crits and crits
-        clean_counts = df_hit_clean['count'].sum()
-        clean_nocrit_counts = df_hit_clean[df_hit_clean.hit < 10]['count'].sum()
-        clean_nocrit_fraction = clean_nocrit_counts / clean_counts
-        clean_crit_fraction = 1 - clean_nocrit_fraction
-        # apply fractions to damage and crit tables
-        df_dmg_clean['fraction'] = df_dmg_clean['fraction'] * clean_nocrit_fraction * dict_fractions['clean']
-        df_crit_clean = df_crit.copy()
-        df_crit_clean['fraction'] = df_crit_clean['fraction'] * clean_crit_fraction * dict_fractions['clean']
-        merged_df = df_dmg_clean.merge(df_crit_clean, on='result', suffixes=('_dmg', '_crit'), how='outer').fillna(0)
-        # sum 'count' and 'fraction' columns
-        merged_df['count'] = merged_df['count_dmg'] + merged_df['count_crit']
-        merged_df['fraction'] = merged_df['fraction_dmg'] + merged_df['fraction_crit']
-        df_dmg_clean = merged_df[['result', 'count', 'fraction']]
-    else:            
-        df_dmg_clean['fraction'] = df_dmg_clean['fraction'] * dict_fractions['clean']
-    dict_outcome['clean'] = df_dmg_clean
+    if melee: # resolve guard for melee attack
+        df_hit.hit -= guard
+    else: # resolve frame and distance for ranged attack
+        range_penalty = (frame + max(0, int(distance/10-5)))
+        df_hit.hit -= range_penalty
+        if verbose:
+            st.write(f"frame {frame}, distance {distance}; penalty {range_penalty}")
 
-    # Initialize df_sum with a copy of the first DataFrame in dict_outcome
-    df_sum = dict_outcome[list(dict_outcome.keys())[0]].copy()
-    # Iterate through each key (DataFrame) in dict_outcome
-    for key, df in dict_outcome.items():
-        if key != list(dict_outcome.keys())[0]:
-            # Group the DataFrame by 'result' and sum the 'fraction' values
-            grouped = df.groupby('result')['fraction'].sum().reset_index()
-            # Merge the grouped DataFrame with df_sum using 'result' as the key
-            df_sum = pd.merge(df_sum, grouped, on='result', how='outer', suffixes=('', f'_{key}'))
-    # Calculate the sum of 'fraction' columns from different layers per result
-    df_sum['fraction'] = df_sum.filter(like='fraction').sum(axis=1)
-    # Sort the df_sum DataFrame by the 'result' column
-    df_sum = df_sum.sort_values(by='result').reset_index(drop=True)
-    dict_outcome['sum'] = df_sum
-    return dict_fractions, dict_outcome
+    dict_hit_dmg = {}
+    for row in df_hit.iterrows():
+        hit = int(row[1]['hit'])
+        crit = bool(crit_threshold < hit)
+        hit_fraction = row[1]['fraction']
+        #import relevant damage table
+        if crit:
+            hit_df_dmg = df_crit.copy()
+        else:
+            hit_df_dmg = df_dmg.copy()
+        hit_df_dmg['fraction'] *= hit_fraction
+        # resolve cover for ranged attacks
+        if (cover is not None) and (hit <= cover):
+            hit_df_dmg['result'] -= block
+        # resolve armor layers: best protection that is struck
+        df_layers_struck = df_armor[hit <= df_armor.coverage]
+        if not df_layers_struck.empty:
+            best_protection = df_layers_struck.protection.max()
+            hit_df_dmg['result'] -= best_protection
+        dict_hit_dmg[str(hit)] = hit_df_dmg
+        #st.write(f"hit: {hit}, crit: {crit}, fraction: {hit_fraction}, best_protection: {best_protection}, result range: {hit_df_dmg['result'].min()} to {hit_df_dmg['result'].max()}")
 
+    # merge all damage tables
+    merged_dfs = []
+    # Iterate through the dataframes in the dictionary and append them to the list
+    for key, df in dict_hit_dmg.items():
+        if 'result' in df.columns:
+            merged_dfs.append(df[['result', 'count', 'fraction']])
 
+    # Concatenate the DataFrames in the list
+    merged_df = pd.concat(merged_dfs)
 
-def report(dict_fractions, dict_outcome, tough):
+    # Group by 'result' and sum the 'count' and 'fraction' columns
+    merged_df = merged_df.groupby('result', as_index=False).sum()
+    df_outcome = merged_df[['result', 'count', 'fraction']]
+    return df_outcome
+
+  
+
+def report(df, tough):
     fig = go.Figure() # Plotting
-    for key, df in dict_outcome.items():
-        fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='lines', name=key))
+    fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='lines', name='outcome'))
     # Create vertical dashed lines at 1 and a specific value (e.g. tough)
     fig.add_shape(go.layout.Shape(type="line", x0=1, x1=1, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='One'))
     fig.add_shape(go.layout.Shape(type="line", x0=tough, x1=tough, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough'))
     st.plotly_chart(fig) # Show the combined plot
-
-    # write distribution of hit outcomes:
-    struck_armor = 0
-    st.write(f"parried (guard): {dict_fractions['guard']*100:.2f}%")
-    for key, value in dict_fractions.items():
-        if key.startswith("armor"):
-            st.write(f"struck {key}: {value*100:.2f}%")
-            struck_armor += value
-    st.write(f"struck clean: {dict_fractions['clean']*100:.2f}%")
-    st.write(f"checksum struck: {(dict_fractions['guard']+struck_armor+dict_fractions['clean'])*100:.2f}%")
-    st.write("")
-
     # Calculate 'no_stop' and 'stopped' based on 'tough'
-    df_sum = dict_outcome['sum']
-    no_stop = df_sum[df_sum['result'] <= tough]['fraction'].sum()
-    stopped = df_sum[tough < df_sum['result']]['fraction'].sum()
+    no_stop = df[df['result'] <= tough]['fraction'].sum()
+    stopped = df[tough < df['result']]['fraction'].sum()
 
     # write distribution of damage outcomes:
     st.write(f"No Stop: {no_stop*100:.2f}%")
     st.write(f"Stopped: {stopped*100:.2f}%")       
-    st.write(f"checksum stoppage: {(no_stop+stopped)*100:.2f}%")
+    #st.write(f"checksum stoppage: {(no_stop+stopped)*100:.2f}%")
 
 
 
 # Specific instructions
-dict_fractions, dict_outcome = attack(guard=guard, block=block)
-report(dict_fractions=dict_fractions, dict_outcome=dict_outcome, tough=tough)
+report(df=attack(frame=5, cover=2, block=4, verbose=True), tough=tough)
