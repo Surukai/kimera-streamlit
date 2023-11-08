@@ -41,6 +41,7 @@ def d_df(*dice): # returns a dataframe with columns (unique)'result', 'count', a
 df_hit = d_df(8, 8).rename(columns={'result': 'hit'})
 df_dmg = d_df(8, 8)
 df_crit = d_df(8, 8, 12)
+
 guard = 4
 block = 12
 tough = 8
@@ -182,6 +183,11 @@ def report(dict_outcome, tough):
 
 
 
-# Specific instructions
-report(dict_outcome=attack(frame=5, cover=2, block=4, verbose=True), tough=tough)
-report(dict_outcome=attack(guard=6, block=12, verbose=True), tough=tough)
+# Specific instructions, crit: dice vs +10
+df_hit = d_df(12, 12).rename(columns={'result': 'hit'})
+report(dict_outcome=attack(df_hit=df_hit, df_crit=df_crit, frame=5, cover=2, block=4, verbose=True), tough=tough)
+df_crit = df_dmg.copy()
+df_crit['result'] = df_crit['result'] + 10
+report(dict_outcome=attack(df_hit=df_hit, df_crit=df_crit, frame=5, cover=2, block=4, verbose=True), tough=tough)
+
+#report(dict_outcome=attack(guard=6, block=12, verbose=True), tough=tough)
