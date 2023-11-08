@@ -35,42 +35,49 @@ def d_df(*dice): # returns a dataframe with columns (unique)'result', 'count', a
     df = pd.DataFrame({'result': list_unique_results, 'count': list_counts, 'fraction': list_fractions})
     return df
 
+
+
 # Defaults
 df_hit = d_df(8, 8).rename(columns={'result': 'hit'})
 df_dmg = d_df(8, 8)
-df_crit = df_dmg.copy()
-df_crit['result'] = df_crit['result'] + 6
+df_crit = d_df(8, 8, 12)
+guard = 4
+block = 12
+tough = 8
+
+layer1 = {'layer': "armor - Reinforced", 'coverage': 2, 'protection': 4}
+layer2 = {'layer': "armor - Light", 'coverage': 6, 'protection': 2}
+
 
 # Sidebar
 with st.sidebar:
     l1 = st.container()
     l2 = st.container()
-    l2.subheader("Layer 2")
-    layer2_coverage = l2.select_slider("L1Coverage", range(20))
-    layer2_protection = l2.select_slider("L1Protection", range(10))
-    l1.subheader("Layer 1")
-    layer1_coverage = l1.select_slider("Coverage", range((layer2_coverage if layer2_coverage > 0 else 2)))
-    layer1_protection = l1.select_slider("Protection", range(20))
+    l2.subheader(layer2['layer'])
+    layer2_coverage = l2.slider("Coverage", 0, 20, layer2['coverage'])
+    layer2_protection = l2.slider("Protection", 0, 10, layer2['protection'])
+    l1.subheader(layer1['layer'])
+    layer1_coverage = l1.slider("Coverage", 0, layer2_coverage, layer1['coverage'])
+    layer1_protection = l1.slider("Protection", 0, 20, layer1['protection'])
 
-layer1 = {'layer': "Reinforced", 'coverage': layer1_coverage, 'protection': layer1_protection}
-layer2 = {'layer': "Light armor", 'coverage': layer2_coverage, 'protection': layer2_protection}
+layer1['coverage'] = layer1_coverage
+layer1['protection'] = layer1_protection
+layer2['coverage'] = layer2_coverage
+layer2['protection'] = layer2_protection
 df_armor = pd.DataFrame([layer1, layer2])
 
 
-# Attack functions
-def attackMelee(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, guard = 3, block = 12, df_armor=df_armor, tough=8):
-    # TODO: generalize to resolve ranged attacks with different arguments
-
+def attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard = None, block = None, ):
+    # TODO: interpret guard argument as melee attack and range argument as ranged
     # resolve Guard; no crit section as crits by definition cannot strike guard
     df_hit.hit -= guard
-    fraction_guard = df_hit[df_hit.hit < 1].fraction.sum()
+    dict_fractions = {'guard': df_hit[df_hit.hit < 1].fraction.sum()}
     df_dmg_guard = df_dmg.copy()
     df_dmg_guard['result'] -= block
-    df_dmg_guard['fraction'] = df_dmg_guard['fraction'] * fraction_guard    
+    df_dmg_guard['fraction'] = df_dmg_guard['fraction'] * dict_fractions['guard']
     dict_outcome = {'guard': df_dmg_guard}
 
     # resolve armor layers
-    dict_layer_fractions = {}
     last_coverage = 0 # lowest coverage that struck last layer
     for row in df_armor.iterrows():
         layer = row[1]['layer']
@@ -78,7 +85,7 @@ def attackMelee(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, guard = 3, block 
         protection = row[1]['protection']
         df_hit_layer = df_hit[(df_hit.hit <= coverage) & (last_coverage < df_hit.hit)]
         armor_hit_fraction = df_hit_layer.fraction.sum()
-        dict_layer_fractions[layer] = armor_hit_fraction
+        dict_fractions[layer] = armor_hit_fraction
         df_dmg_layer = df_dmg.copy()
         if (9 < df_hit_layer.hit.max()): # if any hits on the layer are above 10, calculate crits for this layer
             # calculate fractions of non-crits and crits
@@ -105,7 +112,7 @@ def attackMelee(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, guard = 3, block 
     # that which didn't strike any armor is "clean"
     df_dmg_clean = df_dmg.copy()
     df_hit_clean = df_hit[(df_hit.hit > last_coverage)]
-    fraction_clean = df_hit_clean.fraction.sum()
+    dict_fractions['clean'] = df_hit_clean.fraction.sum()
     if 9 < df_hit_clean.hit.max(): # check for crits:
         # calculate RELATIVE fractions of non-crits and crits
         clean_counts = df_hit_clean['count'].sum()
@@ -113,16 +120,16 @@ def attackMelee(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, guard = 3, block 
         clean_nocrit_fraction = clean_nocrit_counts / clean_counts
         clean_crit_fraction = 1 - clean_nocrit_fraction
         # apply fractions to damage and crit tables
-        df_dmg_clean['fraction'] = df_dmg_clean['fraction'] * clean_nocrit_fraction * fraction_clean
+        df_dmg_clean['fraction'] = df_dmg_clean['fraction'] * clean_nocrit_fraction * dict_fractions['clean']
         df_crit_clean = df_crit.copy()
-        df_crit_clean['fraction'] = df_crit_clean['fraction'] * clean_crit_fraction * fraction_clean
+        df_crit_clean['fraction'] = df_crit_clean['fraction'] * clean_crit_fraction * dict_fractions['clean']
         merged_df = df_dmg_clean.merge(df_crit_clean, on='result', suffixes=('_dmg', '_crit'), how='outer').fillna(0)
         # sum 'count' and 'fraction' columns
         merged_df['count'] = merged_df['count_dmg'] + merged_df['count_crit']
         merged_df['fraction'] = merged_df['fraction_dmg'] + merged_df['fraction_crit']
         df_dmg_clean = merged_df[['result', 'count', 'fraction']]
     else:            
-        df_dmg_clean['fraction'] = df_dmg_clean['fraction'] * fraction_clean
+        df_dmg_clean['fraction'] = df_dmg_clean['fraction'] * dict_fractions['clean']
     dict_outcome['clean'] = df_dmg_clean
 
     # Initialize df_sum with a copy of the first DataFrame in dict_outcome
@@ -139,28 +146,32 @@ def attackMelee(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, guard = 3, block 
     # Sort the df_sum DataFrame by the 'result' column
     df_sum = df_sum.sort_values(by='result').reset_index(drop=True)
     dict_outcome['sum'] = df_sum
+    return dict_fractions, dict_outcome
 
-    fig = go.Figure()
+
+
+def report(dict_fractions, dict_outcome, tough):
+    fig = go.Figure() # Plotting
     for key, df in dict_outcome.items():
         fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='lines', name=key))
-
-    # Create vertical dashed lines at 0 and a specific value (e.g., tough)
-    fig.add_shape(go.layout.Shape(type="line", x0=1, x1=1, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='Zero'))
-    fig.add_shape(go.layout.Shape(type="line", x0=tough, x1=tough, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough Value'))
-    # Show the combined plot
-    st.plotly_chart(fig)
+    # Create vertical dashed lines at 1 and a specific value (e.g. tough)
+    fig.add_shape(go.layout.Shape(type="line", x0=1, x1=1, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='One'))
+    fig.add_shape(go.layout.Shape(type="line", x0=tough, x1=tough, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough'))
+    st.plotly_chart(fig) # Show the combined plot
 
     # write distribution of hit outcomes:
     struck_armor = 0
-    st.write(f"parried (guard): {fraction_guard*100:.2f}%")
-    for key, value in dict_layer_fractions.items():
-        st.write(f"struck {key}: {value*100:.2f}%")
-        struck_armor += value
-    st.write(f"struck clean: {fraction_clean*100:.2f}%")
-    st.write(f"checksum struck: {(fraction_guard+struck_armor+fraction_clean)*100:.2f}%")
+    st.write(f"parried (guard): {dict_fractions['guard']*100:.2f}%")
+    for key, value in dict_fractions.items():
+        if key.startswith("armor"):
+            st.write(f"struck {key}: {value*100:.2f}%")
+            struck_armor += value
+    st.write(f"struck clean: {dict_fractions['clean']*100:.2f}%")
+    st.write(f"checksum struck: {(dict_fractions['guard']+struck_armor+dict_fractions['clean'])*100:.2f}%")
     st.write("")
 
     # Calculate 'no_stop' and 'stopped' based on 'tough'
+    df_sum = dict_outcome['sum']
     no_stop = df_sum[df_sum['result'] <= tough]['fraction'].sum()
     stopped = df_sum[tough < df_sum['result']]['fraction'].sum()
 
@@ -169,5 +180,8 @@ def attackMelee(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, guard = 3, block 
     st.write(f"Stopped: {stopped*100:.2f}%")       
     st.write(f"checksum stoppage: {(no_stop+stopped)*100:.2f}%")
 
+
+
 # Specific instructions
-attackMelee()
+dict_fractions, dict_outcome = attack(guard=guard, block=block)
+report(dict_fractions=dict_fractions, dict_outcome=dict_outcome, tough=tough)
