@@ -184,10 +184,18 @@ def report(dict_outcome, tough):
 
 
 # Specific instructions, crit: dice vs +10
+melee_test = True
 df_hit = d_df(12, 12).rename(columns={'result': 'hit'})
-report(dict_outcome=attack(df_hit=df_hit, df_crit=df_crit, frame=5, cover=2, block=4, verbose=True), tough=tough)
+if melee_test:
+    report(dict_outcome=attack(df_hit=df_hit, df_crit=df_crit, guard=6, block=12, verbose=True), tough=12)
+else:
+    report(dict_outcome=attack(df_hit=df_hit, df_crit=df_crit, frame=5, cover=12, block=20, verbose=True), tough=8)
+
 df_crit = df_dmg.copy()
 df_crit['result'] = df_crit['result'] + 10
-report(dict_outcome=attack(df_hit=df_hit, df_crit=df_crit, frame=5, cover=2, block=4, verbose=True), tough=tough)
+if melee_test:
+    report(dict_outcome=attack(df_hit=df_hit, df_crit=df_crit, guard=6, block=12, verbose=True), tough=12)
+else:
+    report(dict_outcome=attack(df_hit=df_hit, df_crit=df_crit, frame=5, cover=12, block=20, verbose=True), tough=8)
 
 #report(dict_outcome=attack(guard=6, block=12, verbose=True), tough=tough)
