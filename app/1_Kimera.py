@@ -67,6 +67,18 @@ layer2['protection'] = layer2_protection
 df_armor = pd.DataFrame([layer1, layer2])
 
 
+def merge_dfs(dict_dfs):
+    list_merge = []
+    # Iterate dict_hit_dmg and append them to list_df_merged
+    for key, df in dict_dfs.items():
+        if 'result' in df.columns:
+            list_merge.append(df[['result', 'count', 'fraction']])
+    # Concatenate the DataFrames in the list
+    df_merged = pd.concat(list_merge)
+    df_merged = df_merged.groupby('result', as_index=False).sum()
+    return df_merged[['result', 'count', 'fraction']]
+
+
 def attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=None, block=None, frame=None, cover=None, distance=0, verbose=False):
     '''
     df_hit: hit distribution DataFrame with columns 'hit', 'count', and 'fraction'
@@ -82,6 +94,7 @@ def attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, gua
         or as precise as +1 per 10m over 50m.
         As a typical frame is 5, the typical penalty would be exactly 1/10 of the distance: 6 at 60m, 7 at 70m, etc (minimum of 5).
     '''
+    df_hit = df_hit.copy()
     crit_threshold = 9 # results 10 or more are crits
     melee = bool(frame is None)
 
@@ -99,62 +112,76 @@ def attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, gua
         if verbose:
             st.write(f"frame {frame}, distance {distance}; penalty {range_penalty}")
 
+    # initiate general dicts of outcomes
     dict_hit_dmg = {}
+    dict_armor = {}
+    dict_clean = {}
+    dict_block = {}
+    dict_cover = {}
+
     for row in df_hit.iterrows():
         hit = int(row[1]['hit'])
         crit = bool(crit_threshold < hit)
         hit_fraction = row[1]['fraction']
-        #import relevant damage table
+        #fetch relevant damage table
         if crit:
             hit_df_dmg = df_crit.copy()
         else:
             hit_df_dmg = df_dmg.copy()
         hit_df_dmg['fraction'] *= hit_fraction
+        # resolve block for melee attacks
+        if melee:
+            if hit < 1:
+                hit_df_dmg['result'] -= block
+                dict_block[str(hit)] = hit_df_dmg
         # resolve cover for ranged attacks
-        if (cover is not None) and (hit <= cover):
+        elif (cover is not None) and (hit <= cover):
             hit_df_dmg['result'] -= block
+            dict_cover[str(hit)] = hit_df_dmg
         # resolve armor layers: best protection that is struck
-        df_layers_struck = df_armor[hit <= df_armor.coverage]
+        df_layers_struck = df_armor[(hit <= df_armor.coverage) & (0 < df_armor.coverage)]
         if not df_layers_struck.empty:
-            best_protection = df_layers_struck.protection.max()
+            best_protection_row = df_layers_struck.loc[df_layers_struck['protection'].idxmax()]
+            best_protection = best_protection_row['protection']
+            best_layer = best_protection_row['layer']
             hit_df_dmg['result'] -= best_protection
+            dict_armor[best_layer] = hit_df_dmg
+        else:
+            dict_clean[str(hit)] = hit_df_dmg
         dict_hit_dmg[str(hit)] = hit_df_dmg
         #st.write(f"hit: {hit}, crit: {crit}, fraction: {hit_fraction}, best_protection: {best_protection}, result range: {hit_df_dmg['result'].min()} to {hit_df_dmg['result'].max()}")
 
-    # merge all damage tables
-    merged_dfs = []
-    # Iterate through the dataframes in the dictionary and append them to the list
-    for key, df in dict_hit_dmg.items():
-        if 'result' in df.columns:
-            merged_dfs.append(df[['result', 'count', 'fraction']])
+    # compile dict of outcomes
+    dict_outcome = {'sum': merge_dfs(dict_hit_dmg)}
+    for key, df in dict_armor.items():
+        dict_outcome[key] = df
+    if dict_clean:
+        dict_outcome['clean'] = merge_dfs(dict_clean)
+    if dict_block:
+        dict_outcome['block'] = merge_dfs(dict_block)
+    if dict_cover:
+        dict_outcome['cover'] = merge_dfs(dict_cover)
+    return dict_outcome
 
-    # Concatenate the DataFrames in the list
-    merged_df = pd.concat(merged_dfs)
 
-    # Group by 'result' and sum the 'count' and 'fraction' columns
-    merged_df = merged_df.groupby('result', as_index=False).sum()
-    df_outcome = merged_df[['result', 'count', 'fraction']]
-    return df_outcome
+def report(dict_outcome, tough):
+    # Calculate 'no_stop' and 'stopped' based on 'tough'
+    df = dict_outcome['sum']
+    no_stop = df[df['result'] <= tough]['fraction'].sum()
+    stopped = df[tough < df['result']]['fraction'].sum()
+    st.write(f"Stopped: {stopped*100:.2f}% ({no_stop*100:.2f}% failure)")
 
-  
-
-def report(df, tough):
     fig = go.Figure() # Plotting
-    fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='lines', name='outcome'))
+    for key, df in dict_outcome.items():
+        if df is not None:
+            fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='lines', name=key))
     # Create vertical dashed lines at 1 and a specific value (e.g. tough)
     fig.add_shape(go.layout.Shape(type="line", x0=1, x1=1, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='One'))
     fig.add_shape(go.layout.Shape(type="line", x0=tough, x1=tough, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough'))
     st.plotly_chart(fig) # Show the combined plot
-    # Calculate 'no_stop' and 'stopped' based on 'tough'
-    no_stop = df[df['result'] <= tough]['fraction'].sum()
-    stopped = df[tough < df['result']]['fraction'].sum()
-
-    # write distribution of damage outcomes:
-    st.write(f"No Stop: {no_stop*100:.2f}%")
-    st.write(f"Stopped: {stopped*100:.2f}%")       
-    #st.write(f"checksum stoppage: {(no_stop+stopped)*100:.2f}%")
 
 
 
 # Specific instructions
-report(df=attack(frame=5, cover=2, block=4, verbose=True), tough=tough)
+report(dict_outcome=attack(frame=5, cover=2, block=4, verbose=True), tough=tough)
+report(dict_outcome=attack(guard=6, block=12, verbose=True), tough=tough)
