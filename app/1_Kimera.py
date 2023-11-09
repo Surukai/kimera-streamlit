@@ -39,26 +39,6 @@ def d_df(*dice): # returns a dataframe with columns (unique)'result', 'count', a
 
 
 
-# PC Attack test defaults
-df_hit = d_df(8, 8).rename(columns={'result': 'hit'})
-df_dmg = d_df(8, 8)
-df_crit = d_df(8, 8, 12)
-
-guard = 4
-block = 12
-tough = 8
-
-# PC Defend test defaults
-df_guard = d_df(8, 8)
-df_tough_guard = d_df(8, 8, 8)
-df_dodge = d_df(8, 8)
-df_tough = d_df(8)
-df_cover = d_df(8)
-df_frame = d_df(10)
-hit = 8
-dmg = 8
-crit_dmg = dmg + 10
-
 # Armor defaults ()
 layer1 = {'layer': "armor - Reinforced", 'coverage': 2, 'protection': 4}
 layer2 = {'layer': "armor - Light", 'coverage': 6, 'protection': 2}
@@ -95,7 +75,7 @@ def merge_dfs(dict_dfs):
     return df_merged[['result', 'count', 'fraction']]
 
 
-def attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=None, block=None, frame=None, cover=None, distance=0, verbose=False):
+def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, block=None, frame=None, cover=None, distance=0, verbose=False):
     '''
     Resolves PC attack (rolled) vs NPC (static)
     df_hit: hit distribution DataFrame with columns 'hit', 'count', and 'fraction'
@@ -188,7 +168,7 @@ def attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, gua
 
 
 
-def defend(df_guard=None, df_tough_guard=None, df_dodge=None, df_tough=df_tough, hit=hit, dmg=dmg, crit_dmg=crit_dmg, df_armor=df_armor, df_frame=None, df_cover=None, distance=0, verbose=False):
+def defend(df_guard=None, df_tough_guard=None, df_dodge=None, df_tough=None, hit=None, dmg=None, crit_dmg=None, df_armor=None, df_frame=None, df_cover=None, distance=0, verbose=False):
     '''
     Resolves PC defense (rolled) against an NPC attack (static)
     (params)
@@ -261,11 +241,11 @@ def report(dict_outcome, defend=False, tough=None):
             no_effect = df[df['result'] < 0]['fraction'].sum()
             staggered = df[(0 <= df['result']) & (df['result'] < tough)]['fraction'].sum()
             stopped = df[tough <= df['result']]['fraction'].sum()
-            st.write(f"Stopped: {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
+            st.write(f"Effect rating {(stopped+(staggered/2))*100:.2f}% - - - Stopped: {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
         else:
             no_effect = df[df['result'] < tough]['fraction'].sum()
             stopped = df[tough <= df['result']]['fraction'].sum()
-            st.write(f"Stopped: {stopped*100:.2f}% - ({no_effect*100:.2f}% failure)")
+            st.write(f"Effect rating: {stopped*100:.2f}% - - - ({no_effect*100:.2f}% failure)")
 
     fig = go.Figure() # Plotting
     num_keys = len(dict_outcome)
@@ -288,31 +268,47 @@ def report(dict_outcome, defend=False, tough=None):
     st.plotly_chart(fig) # Show the combined plot
 
 
+#################### test parameters ####################
 
-# Instructions
-test_attack = False
+
+# test type
+test_attack = True
+test_defend = True
 test_melee = True
 test_dodge = False
 
-if test_attack: #crit: dice vs +10
-    df_hit = d_df(8, 8).rename(columns={'result': 'hit'})
-    if test_melee:
-        report(dict_outcome=attack(df_hit=df_hit, df_crit=df_crit, guard=8, block=12, verbose=True), tough=12)
-    else:
-        report(dict_outcome=attack(df_hit=df_hit, df_crit=df_crit, frame=5, cover=12, block=20, verbose=True), tough=8)
+# basic parameters
+hit = 8
+dmg = 8
+crit_dmg = dmg + 10
+guard = 8
+block = 12
+tough = 4
+frame = 5
 
-    df_crit = df_dmg.copy()
-    df_crit['result'] = df_crit['result'] + 10
+# PC Attack test (derived parameters)
+df_hit = d_df(hit, hit).rename(columns={'result': 'hit'})
+df_dmg = d_df(dmg, dmg)
+df_crit = df_dmg.copy()
+df_crit['result'] = df_crit['result'] + (crit_dmg-dmg)
+
+# PC Defend test (derived parameters)
+df_guard = d_df(guard, guard)
+df_tough_guard = d_df(8, 8, 8)
+df_dodge = d_df(8, 8)
+df_tough = d_df(tough)
+df_cover = d_df(8)
+df_frame = d_df(frame*2)
+
+
+##################### test sequence #####################
+
+
+if test_attack:
     if test_melee:
-        report(dict_outcome=attack(df_hit=df_hit, df_crit=df_crit, guard=8, block=12, verbose=True), tough=12)
+        report(dict_outcome=attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=8, block=12, verbose=True), tough=tough)
     else:
-        report(dict_outcome=attack(df_hit=df_hit, df_crit=df_crit, frame=5, cover=12, block=20, verbose=True), tough=8)
-else: # Defense test
-    df_hit = d_df(8,6,8,6).rename(columns={'result': 'hit'})
-    df_crit = df_dmg.copy()
-    df_crit['result'] = df_crit['result'] + 10
-    hit=14
-    dmg=8
-    crit_dmg=18
-    report(dict_outcome=defend(df_guard=df_guard, df_tough_guard=df_tough_guard, df_dodge=df_dodge, df_tough=df_tough, hit=hit, dmg=dmg, crit_dmg=crit_dmg, df_armor=df_armor, df_frame=df_frame, df_cover=df_cover, distance=0, verbose=True), defend=True, tough=tough/2)
-    report(dict_outcome=attack(df_hit=df_hit, df_crit=df_crit, guard=8, block=12, verbose=True), tough=8)
+        report(dict_outcome=attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, frame=5, cover=12, block=20, verbose=True), tough=tough)
+if test_defend:
+    if test_melee:
+        report(dict_outcome=defend(df_guard=df_guard, df_tough_guard=df_tough_guard, df_dodge=df_dodge, df_tough=df_tough, hit=hit, dmg=dmg, crit_dmg=crit_dmg, df_armor=df_armor, df_frame=df_frame, df_cover=df_cover, distance=0, verbose=True), defend=True, tough=tough)
