@@ -146,7 +146,7 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
             dict_cover[str(diff)] = hit_df_dmg
         # resolve armor layers: best protection that is struck
         if 0 < diff: # only resolve armor for connected hits
-            df_layers_struck = df_armor[((diff <= df_armor.coverage) & (0 < df_armor.coverage)) | df_armor.coverage == 0]
+            df_layers_struck = df_armor[((diff <= df_armor.coverage) & (0 < df_armor.coverage)) | (df_armor.coverage == 0)]
             if not df_layers_struck.empty:
                 best_protection_row = df_layers_struck.loc[df_layers_struck['protection'].idxmax()]
                 protection = best_protection_row['protection']
@@ -218,18 +218,18 @@ def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hi
             else:
                 c_dmg = dmg
             df_dmg_taken = pd.DataFrame({ # damage taken when not blocking
-                'count': df_tough['count'], # fairly pointless column, but needed for merge_dfs
+                'count': df_tough['count'],
                 'fraction': df_tough['fraction'] * guard_fraction,
                 'result': c_dmg - df_tough['result']})
             # resolve armor layers: best protection that is struck
-            df_layers_struck = df_armor[(diff < df_armor.coverage) | df_armor.coverage == 0]
+            df_layers_struck = df_armor[(diff < df_armor.coverage) | (df_armor.coverage == 0)]
             if not df_layers_struck.empty:
                 best_protection_row = df_layers_struck.loc[df_layers_struck['protection'].idxmax()]
                 protection = best_protection_row['protection']
                 best_layer = best_protection_row['layer']
                 # reverseengineer toughness roll with added protection
                 list_d = list_d_tough.copy()
-                list_d.append(protection)
+                list_d.append(protection*2)
                 df_armor_tough = d_df(*list_d)
                 df_dmg_taken = pd.DataFrame({ # damage taken when blocking
                 'count': df_armor_tough['count'],
@@ -359,8 +359,6 @@ df_frame = d_df(frame*2)
 
 
 ##################### test sequence #####################
-
-df_test = d_df(8, 8, 8)
 
 if test_attack:
     if test_melee:
