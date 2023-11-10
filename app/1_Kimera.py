@@ -79,7 +79,7 @@ with st.sidebar:
     dmg = slide_dmg.slider("Damage", 4, 36, 8, step=2)
     guard = slide_guard.slider("Guard", 0, 36, 8, step=2)
     block = slide_block.slider("Block", 0, 36, 12, step=2)
-    tough = slide_tough.slider("Tough (def only)", 4, 36, 8, step=2)
+    tough = slide_tough.slider("Tough", 4, 36, 8, step=2)
 
     l1 = st.container()
     l2 = st.container()
@@ -118,7 +118,7 @@ def merge_dfs(dict_dfs):
 
 
 
-def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, block=None, frame=None, cover=None, distance=0, verbose=False):
+def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, block=None, tough=None, frame=None, cover=None, distance=0, verbose=False):
     '''
     Resolves PC attack (rolled) vs NPC (static)
     df_hit: hit distribution DataFrame with columns 'hit', 'count', and 'fraction'
@@ -138,12 +138,13 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
     df_hit = df_hit.copy()
     crit_threshold = 9 # results 10 or more are crits
     melee = bool(frame is None)
+    passive_tough = tough/2 # convert to passive toughness
 
     if verbose:
         if melee:
-            st.write(f"melee attack {df_hit['hit'].min()}-{df_hit['hit'].max()}, dmg {df_dmg.result.min()}-{df_crit.result.max()} . . . vs . . . guard {guard}, block {block}")
+            st.write(f"melee attack {df_hit['hit'].min()}-{df_hit['hit'].max()}, dmg {df_dmg.result.min()}-{df_crit.result.max()} . . . vs . . . guard {guard}, block {block}, passive tough {passive_tough}")
         else:
-            st.write(f"ranged attack {df_hit['hit'].min()}-{df_hit['hit'].max()}, dmg {df_dmg.result.min()}-{df_crit.result.max()} . . . vs . . . frame {frame}, cover {cover}, block {block}, distance {distance}m")
+            st.write(f"ranged attack {df_hit['hit'].min()}-{df_hit['hit'].max()}, dmg {df_dmg.result.min()}-{df_crit.result.max()} . . . vs . . . frame {frame}, cover {cover}, block {block}, passive tough {passive_tough}, distance {distance}m")
 
     if melee: # resolve guard for melee attack
         df_hit.hit -= guard
@@ -178,14 +179,14 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
                 protection = block
                 if superblock:
                     hit_df_dmg.loc[hit_df_dmg['result'] <= guard, 'result'] = 0 # superior blocks
-                    #hit_df_dmg.loc[guard < hit_df_dmg['result'], 'result'] -= protection # regular blocks
+                    hit_df_dmg.loc[guard < hit_df_dmg['result'], 'result'] -= protection # regular blocks
                 else:
-                    hit_df_dmg['result'] -= protection
+                    hit_df_dmg['result'] -= (protection+passive_tough)
                 dict_block[str(diff)] = hit_df_dmg
                 str_outcome = f"blocked"
         # resolve cover for ranged attacks
         elif (cover is not None) and (diff <= cover):
-            hit_df_dmg['result'] -= block
+            hit_df_dmg['result'] -= (block+passive_tough)
             dict_cover[str(diff)] = hit_df_dmg
         # resolve armor layers: best protection that is struck
         if 0 < diff: # only resolve armor for connected hits
@@ -195,17 +196,20 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
                 best_layer = best_protection_row['layer']
                 protection = best_protection_row['protection']
                 if 0 < protection:
-                    hit_df_dmg['result'] -= protection
+                    hit_df_dmg['result'] -= (protection+passive_tough)
                     dict_armor[best_layer] = hit_df_dmg
                     str_outcome = f"struck {best_layer}, protection {protection}"
                 else:
+                    hit_df_dmg['result'] -= passive_tough
                     dict_clean[str(diff)] = hit_df_dmg
                     str_outcome = "clean"
             else:
+                hit_df_dmg['result'] -= passive_tough
                 dict_clean[str(diff)] = hit_df_dmg
                 str_outcome = "clean"
         dict_hit_dmg[str(diff)] = hit_df_dmg
         if critical:
+            hit_df_dmg['result'] -= passive_tough
             dict_crit[str(diff)] = hit_df_dmg
             str_outcome = f"{str_outcome} (critical)"
         if verbose:
@@ -386,7 +390,7 @@ def compare(dict_dfs):
 
 #################### test parameters ####################
 
-verbose = False
+verbose = True
 superblock = False
 
 # test type
@@ -422,7 +426,7 @@ df_frame = d_df(10)
 
 ##################### test sequence #####################
 st.write(f"hit {hit}, dmg {dmg}, guard {guard}, block {block}")
-dict_attack = attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=guard, block=block, verbose=verbose)
+dict_attack = attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=guard, block=block, tough=tough, verbose=verbose)
 dict_defend = defend(df_guard=df_guard, df_tough_block=df_tough_block, df_dodge=df_dodge, ddf_tough=ddf_tough, hit=hit, dmg=dmg, crit_dmg=crit_dmg, df_armor=df_armor, df_frame=df_frame, df_cover=df_cover, distance=0, verbose=verbose)
 dict_dfs = {'attack': dict_attack['sum'], 'defend': dict_defend['sum']}
 compare(dict_dfs)
