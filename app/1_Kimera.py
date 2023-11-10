@@ -408,7 +408,7 @@ df_crit['result'] = df_crit['result'] + (crit_dmg-dmg)
 
 # PC Defend test (derived parameters)
 df_guard = d_df(*sum([int2d(guard) for _ in range(2)], []))
-df_tough_block = d_df(*sum([int2d(block), int2d(tough)], []))
+df_tough_block = d_df(*sum([int2d(block) for _ in range(2)], []), *int2d(tough))
 ddf_tough = d_dict(*int2d(tough))
 # Not used yet
 df_dodge = d_df(*sum([int2d(12) for _ in range(2)], []))
