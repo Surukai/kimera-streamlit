@@ -176,8 +176,11 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
         if melee:
             if diff < 1: # successful block
                 protection = block
-                hit_df_dmg.loc[hit_df_dmg['result'] <= guard, 'result'] = 0 # superior blocks
-                hit_df_dmg.loc[guard < hit_df_dmg['result'], 'result'] -= protection # regular blocks
+                if superblock:
+                    hit_df_dmg.loc[hit_df_dmg['result'] <= guard, 'result'] = 0 # superior blocks
+                    #hit_df_dmg.loc[guard < hit_df_dmg['result'], 'result'] -= protection # regular blocks
+                else:
+                    hit_df_dmg['result'] -= protection
                 dict_block[str(diff)] = hit_df_dmg
                 str_outcome = f"blocked"
         # resolve cover for ranged attacks
@@ -233,15 +236,16 @@ def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hi
         As a typical frame is 5, the typical penalty would be exactly 1/10 of the distance: 6 at 60m, 7 at 70m, etc (minimum of 5).
     Returns a dict of DataFrames with columns 'result', 'count', and 'fraction', describing the outcomes of the attack
     '''
+    list_d_tough = [int(value) for value in str(list(ddf_tough.keys())[0]).strip('()').split(',') if value]
+    df_tough = list(ddf_tough.values())[0]
+
     if verbose:
-        st.write(f"PC defense {df_guard['result'].min()}-{df_guard['result'].max()}, Block {df_tough_block['result'].min()}-{df_tough_block['result'].max()}, Tough {df_tough['result'].min()}-{df_tough['result'].max()}({int(df_tough['result'].max()/2)}) . . . vs . . . hit {hit}, dmg {dmg}-{crit_dmg}")
+        st.write(f"PC defense {df_guard['result'].min()}-{df_guard['result'].max()}, BlockTough {df_tough_block['result'].min()}-{df_tough_block['result'].max()},                 Tough {df_tough['result'].min()}-{df_tough['result'].max()}({int(df_tough['result'].max()/2)})                   . . . vs . . . hit {hit}, dmg {dmg}-{crit_dmg}")
     dict_sum = {}
     dict_block = {}
     dict_armor = {}
     dict_clean = {}
     dict_crit = {}
-    list_d_tough = [int(value) for value in str(list(ddf_tough.keys())[0]).strip('()').split(',') if value]
-    df_tough = list(ddf_tough.values())[0]
     # cycle through GUARD rolls and add the corresponding damage tables to dict(s)
     for row in df_guard.iterrows():
         guard = int(row[1]['result'])
@@ -254,9 +258,10 @@ def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hi
                 'fraction': df_tough_block['fraction'] * guard_fraction,
                 'result': dmg - df_tough_block['result']})
             str_outcome = "blocked"
-            if dmg < guard: #superior block
-                df_dmg_taken['result'] = -1
-                str_outcome = "super blocked"
+            if superblock:
+                if dmg < guard: #superior block
+                    df_dmg_taken['result'] = -1
+                    str_outcome = "super blocked"
             dict_block[str(guard)] = df_dmg_taken
         else: # connected hit
             if critical:
@@ -364,16 +369,16 @@ def compare(dict_dfs):
             df = df_raw.copy()
             if key.startswith('attack'):
                 df['result'] = df['result'] - 1
-            no_effect = df[df['result'] < 1]['fraction'].sum()
-            staggered = df[(1 <= df['result']) & (df['result'] < 5)]['fraction'].sum()
-            stopped = df[5 <= df['result']]['fraction'].sum()
+            no_effect = df[df['result'] < 0]['fraction'].sum()
+            staggered = df[(0 <= df['result']) & (df['result'] < 4)]['fraction'].sum()
+            stopped = df[4 <= df['result']]['fraction'].sum()
             st.write(f"{key} outcome: Stopped {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
 
             line_color = f'rgba({colors[index][0]}, {colors[index][1]}, {colors[index][2]}, 0.5)'
             fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='lines', name=key, line=dict(color=line_color)))
 
     fig.add_shape(go.layout.Shape(type="line", x0=0, x1=0, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='One'))
-    fig.add_shape(go.layout.Shape(type="line", x0=5, x1=5, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough'))
+    fig.add_shape(go.layout.Shape(type="line", x0=4, x1=4, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough'))
 
     st.plotly_chart(fig) # Show the combined plot
 
@@ -382,6 +387,7 @@ def compare(dict_dfs):
 #################### test parameters ####################
 
 verbose = False
+superblock = False
 
 # test type
 test_attack = True
@@ -407,6 +413,7 @@ df_crit['result'] = df_crit['result'] + (crit_dmg-dmg)
 # PC Defend test (derived parameters)
 df_guard = d_df(*sum([int2d(guard) for _ in range(2)], []))
 df_tough_block = d_df(*sum([int2d(block), int2d(tough)], []))
+#st.write(f"df_tough_block: {df_tough_block}")
 df_dodge = d_df(*sum([int2d(12) for _ in range(2)], []))
 ddf_tough = d_dict(*sum([int2d(tough) for _ in range(2)], []))
 df_cover = d_df(12)
