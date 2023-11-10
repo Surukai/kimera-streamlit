@@ -43,22 +43,36 @@ def d_dict(*dice): # ddf: dict where key conserves the dice rolled
 
 
 
-# Armor defaults ()
-layer1 = {'layer': "armor - Reinforced", 'coverage': 2, 'protection': 4}
-layer2 = {'layer': "armor - Light", 'coverage': 6, 'protection': 2}
+# Armor defaults
+layer1 = {'layer': "armor - Reinforced", 'coverage': 2, 'protection': 0}
+layer2 = {'layer': "armor - Light", 'coverage': 6, 'protection': 0}
 
 
 
 # Sidebar
 with st.sidebar:
+    slide_hit = st.container()
+    slide_dmg = st.container()
+    slide_guard = st.container()
+    slide_block = st.container()
+    slide_tough = st.container()
+    hit = slide_hit.slider("Hit", 4, 24, 8)
+    dmg = slide_dmg.slider("Damage", 4, 24, 8)
+    guard = slide_guard.slider("Guard", 0, 24, 8)
+    block = slide_block.slider("Block", 0, 24, 12)
+    tough = slide_tough.slider("Tough (def only)", 4, 24, 8)
+
     l1 = st.container()
     l2 = st.container()
-    l1.subheader(layer1['layer'])
-    layer1_coverage = l1.slider("Coverage", 0, 20, layer1['coverage'])
-    layer1_protection = l1.slider("Protection", 0, 20, layer1['protection'])
-    l2.subheader(layer2['layer'])
-    layer2_coverage = l2.slider("Coverage", 0, 20, layer2['coverage'])
-    layer2_protection = l2.slider("Protection", 0, 20, layer2['protection'])
+    with l1:
+        st.subheader(layer1['layer'])
+        layer1_coverage = st.slider("Coverage 1", 0, 20, layer1['coverage'], key="layer1_coverage")
+        layer1_protection = st.slider("Protection 1", 0, 20, layer1['protection'], key="layer1_protection")
+
+    with l2:
+        st.subheader(layer2['layer'])
+        layer2_coverage = st.slider("Coverage 2", 0, 20, layer2['coverage'], key="layer2_coverage")
+        layer2_protection = st.slider("Protection 2", 0, 20, layer2['protection'], key="layer2_protection")
 
 layer1['coverage'] = layer1_coverage
 layer1['protection'] = layer1_protection
@@ -196,7 +210,6 @@ def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hi
     '''
     if verbose:
         st.write(f"PC defense {df_guard['result'].min()}-{df_guard['result'].max()}, Block {df_tough_block['result'].min()}-{df_tough_block['result'].max()}, Tough {df_tough['result'].min()}-{df_tough['result'].max()}({int(df_tough['result'].max()/2)}) . . . vs . . . hit {hit}, dmg {dmg}-{crit_dmg}")
-    
     dict_sum = {}
     dict_block = {}
     dict_armor = {}
@@ -204,6 +217,7 @@ def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hi
     dict_crit = {}
     list_d_tough = [int(value) for value in str(list(ddf_tough.keys())[0]).strip('()').split(',') if value]
     df_tough = list(ddf_tough.values())[0]
+    st.write(f"toughness {list_d_tough}")
     # cycle through GUARD rolls and add the corresponding damage tables to dict(s)
     for row in df_guard.iterrows():
         guard = int(row[1]['result'])
@@ -296,7 +310,7 @@ def report(dict_outcome, defend=False):
         stopped = df[threshold <= df['result']]['fraction'].sum()
         st.write(f"Active defense: Stopped: {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
     else: # attack
-        threshold = 5
+        threshold = tough/2+1
         no_effect = df[df['result'] < 1]['fraction'].sum()
         staggered = df[(1 <= df['result']) & (df['result'] < threshold)]['fraction'].sum()
         stopped = df[threshold <= df['result']]['fraction'].sum()
@@ -335,8 +349,7 @@ def compare(dict_dfs):
             fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='lines', name=key, line=dict(color=line_color)))
 
     fig.add_shape(go.layout.Shape(type="line", x0=0, x1=0, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='One'))
-    if tough is not None:
-        fig.add_shape(go.layout.Shape(type="line", x0=tough, x1=tough, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough'))
+    fig.add_shape(go.layout.Shape(type="line", x0=5, x1=5, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough'))
 
     st.plotly_chart(fig) # Show the combined plot
 
@@ -353,12 +366,12 @@ test_melee = True
 test_dodge = False
 
 # basic parameters
-hit = 8
-dmg = 8
+#hit = 8
+#dmg = 8
 crit_dmg = dmg + 10
-guard = 8
-block = 12
-tough = 8
+#guard = 8
+#block = 12
+#tough = 8
 frame = 5
 
 # PC Attack test (derived parameters)
@@ -377,8 +390,8 @@ df_frame = d_df(frame*2)
 
 
 ##################### test sequence #####################
-st.write(f"hit {hit}, dmg {dmg}, guard {guard}, block {block}")
-dict_attack = attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=8, block=12, verbose=verbose)
+st.write(f"hit {hit}, dmg {dmg}, guard {guard}({df_guard.shape[0]}), block {block}")
+dict_attack = attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=guard, block=block, verbose=verbose)
 dict_defend = defend(df_guard=df_guard, df_tough_block=df_tough_block, df_dodge=df_dodge, ddf_tough=ddf_tough, hit=hit, dmg=dmg, crit_dmg=crit_dmg, df_armor=df_armor, df_frame=df_frame, df_cover=df_cover, distance=0, verbose=verbose)
 dict_dfs = {'attack': dict_attack['sum'], 'defend': dict_defend['sum']}
 compare(dict_dfs)
