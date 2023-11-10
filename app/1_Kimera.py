@@ -12,26 +12,27 @@ def getWeapons(file :str) -> pd.DataFrame:
     return pd.read_csv(file)
 
 # Dice functions
-KIMERA_DICE = {4, 6, 8, 10, 12}
 
-#@st.cache_data()
+@st.cache_data()
 def int2d(value):
-    if value == 14:
-        return [8, 6]
-    elif value == 16:
-        return [8, 8]
-    elif value == 18:
-        return [10, 8]
-    elif value == 20:
-        return [10, 10]
-    elif value == 22:
-        return [12, 10]
-    elif value == 24:
-        return [12, 12]
+    dice_mappings = {
+        14: [8, 6],
+        16: [8, 8],
+        18: [10, 8],
+        20: [10, 10],
+        22: [12, 10],
+        24: [12, 12]}
+    list_dice = []
+    while value > 24: #add a d12 for every 12 over 24
+        value -= 12
+        list_dice.append(12)
+    if value in dice_mappings: #convert the rest to Kimera dice
+        list_dice.extend(dice_mappings[value])
     else:
-        if value not in KIMERA_DICE:
+        if value not in {4, 6, 8, 10, 12}:
             st.write(f"WARNING! int2d: d{value} is not a Kimera dice")
-        return [value] # return original
+        list_dice.extend([value])
+    return list_dice
 
 @st.cache_data()
 def d(*dice):
@@ -74,11 +75,11 @@ with st.sidebar:
     slide_guard = st.container()
     slide_block = st.container()
     slide_tough = st.container()
-    hit = slide_hit.slider("Hit", 4, 24, 8, step=2)
-    dmg = slide_dmg.slider("Damage", 4, 24, 8, step=2)
-    guard = slide_guard.slider("Guard", 0, 24, 8, step=2)
-    block = slide_block.slider("Block", 0, 24, 12, step=2)
-    tough = slide_tough.slider("Tough (def only)", 4, 24, 8, step=2)
+    hit = slide_hit.slider("Hit", 4, 36, 8, step=2)
+    dmg = slide_dmg.slider("Damage", 4, 36, 8, step=2)
+    guard = slide_guard.slider("Guard", 0, 36, 8, step=2)
+    block = slide_block.slider("Block", 0, 36, 12, step=2)
+    tough = slide_tough.slider("Tough (def only)", 4, 36, 8, step=2)
 
     l1 = st.container()
     l2 = st.container()
@@ -98,16 +99,23 @@ layer2['protection'] = layer2_protection
 df_armor = pd.DataFrame([layer1, layer2])
 
 
+
 def merge_dfs(dict_dfs):
     list_merge = []
-    # Iterate dict_hit_dmg and append them to list_df_merged
+    # Iterate dict_dfs and append non-empty DataFrames to list_merge
     for key, df in dict_dfs.items():
-        if 'result' in df.columns:
+        if 'result' in df.columns and not df.empty:
             list_merge.append(df[['result', 'count', 'fraction']])
-    # Concatenate the DataFrames in the list
-    df_merged = pd.concat(list_merge)
-    df_merged = df_merged.groupby('result', as_index=False).sum()
-    return df_merged[['result', 'count', 'fraction']]
+    # Check if list_merge is not empty before concatenating
+    if list_merge:
+        # Concatenate the DataFrames in the list
+        df_merged = pd.concat(list_merge)
+        df_merged = df_merged.groupby('result', as_index=False).sum()
+        return df_merged[['result', 'count', 'fraction']]
+    else:
+        # Return an empty DataFrame as a placeholder
+        return pd.DataFrame(columns=['result', 'count', 'fraction'])
+
 
 
 def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, block=None, frame=None, cover=None, distance=0, verbose=False):
@@ -398,11 +406,12 @@ df_crit['result'] = df_crit['result'] + (crit_dmg-dmg)
 
 # PC Defend test (derived parameters)
 df_guard = d_df(*sum([int2d(guard) for _ in range(2)], []))
+st.write(sum([int2d(guard) for _ in range(2)], []))
 df_tough_block = d_df(*sum([int2d(block), int2d(tough)], []))
 df_dodge = d_df(*sum([int2d(12) for _ in range(2)], []))
 ddf_tough = d_dict(*sum([int2d(tough) for _ in range(2)], []))
 df_cover = d_df(12)
-df_frame = d_df(frame*2)
+df_frame = d_df(10)
 
 
 ##################### test sequence #####################
