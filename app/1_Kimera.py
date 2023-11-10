@@ -388,7 +388,7 @@ def compare(dict_dfs):
 
 #################### test parameters ####################
 
-verbose = True
+verbose = False
 superblock = False
 
 # test type
@@ -397,13 +397,7 @@ test_defend = True
 test_melee = True
 test_dodge = False
 
-# basic parameters
-#hit = 8
-#dmg = 8
 crit_dmg = dmg + 10
-#guard = 8
-#block = 12
-#tough = 8
 frame = 5
 
 # PC Attack test (derived parameters)
@@ -415,15 +409,15 @@ df_crit['result'] = df_crit['result'] + (crit_dmg-dmg)
 # PC Defend test (derived parameters)
 df_guard = d_df(*sum([int2d(guard) for _ in range(2)], []))
 df_tough_block = d_df(*sum([int2d(block), int2d(tough)], []))
-#st.write(f"df_tough_block: {df_tough_block}")
+ddf_tough = d_dict(*int2d(tough))
+# Not used yet
 df_dodge = d_df(*sum([int2d(12) for _ in range(2)], []))
-ddf_tough = d_dict(*sum([int2d(tough) for _ in range(2)], []))
 df_cover = d_df(12)
 df_frame = d_df(10)
 
 
 ##################### test sequence #####################
-st.write(f"hit {hit}, dmg {dmg}, guard {guard}, block {block}")
+st.write(f"hit {hit}, dmg {dmg}, guard {guard}, block {block}, tough(a/p) {tough}/{int(tough/2)}")
 dict_attack = attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=guard, block=block, tough=tough, verbose=verbose)
 dict_defend = defend(df_guard=df_guard, df_tough_block=df_tough_block, df_dodge=df_dodge, ddf_tough=ddf_tough, hit=hit, dmg=dmg, crit_dmg=crit_dmg, df_armor=df_armor, df_frame=df_frame, df_cover=df_cover, distance=0, verbose=verbose)
 dict_dfs = {'attack': dict_attack['sum'], 'defend': dict_defend['sum']}
