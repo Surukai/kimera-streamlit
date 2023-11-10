@@ -14,6 +14,8 @@ def getWeapons(file :str) -> pd.DataFrame:
 
 
 # Dice functions
+KIMERA_DICE = {4, 6, 8, 10, 12}
+
 @st.cache_data()
 def d(*dice):
     result = 0
@@ -21,12 +23,43 @@ def d(*dice):
         result += np.random.randint(low=1, high=d)
     return result
 
-@st.cache_data()
-def d_list(*dice): # returns a sorted list of all results possible with *dice
-    results = [sum(combination) for combination in product(*[range(1, d + 1) for d in dice])]
+#@st.cache_data()
+def split_dice(value):
+    if value == 14:
+        return [8, 6]
+    elif value == 16:
+        return [8, 8]
+    elif value == 18:
+        return [10, 8]
+    elif value == 20:
+        return [10, 10]
+    elif value == 22:
+        return [12, 10]
+    elif value == 24:
+        return [12, 12]
+    else:
+        st.write(f"WARNING! split_dice: d{value} is not a Kimera dice")
+        return [value] # return original
+
+#@st.cache_data()
+def d_list(*dice):
+    list_dice = []
+    for d in dice:
+        while d > 24:
+            d -= 12
+            list_dice.append(12)
+    if 12 < d:
+        list_dice.extend(split_dice(d))
+    else:
+        list_dice.append(d)
+    # check if all dice are supported
+    for d in list_dice:
+        if d not in KIMERA_DICE:
+            st.write(f"WARNING! d_list: d{d} is not a Kimera dice")
+    results = [sum(combination) for combination in product(*[range(1, d + 1) for d in list_dice])]
     return sorted(results)
 
-@st.cache_data()
+#@st.cache_data()
 def d_df(*dice): # returns a dataframe with columns (unique)'result', 'count', and 'fraction'
     # TODO: check dice vs set of supported dice; break up high numbers into supported dice
     list_results = d_list(*dice)
@@ -37,7 +70,7 @@ def d_df(*dice): # returns a dataframe with columns (unique)'result', 'count', a
     df = pd.DataFrame({'result': list_unique_results, 'count': list_counts, 'fraction': list_fractions})
     return df
 
-@st.cache_data()
+#@st.cache_data()
 def d_dict(*dice): # ddf: dict where key conserves the dice rolled
     return {str(dice): d_df(*dice)}
 
@@ -361,6 +394,7 @@ df_frame = d_df(frame*2)
 ##################### test sequence #####################
 
 df_test = d_df(8, 8, 8)
+df_wrong = d_df(24)
 
 if test_attack:
     if test_melee:
