@@ -138,7 +138,7 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
     df_hit = df_hit.copy()
     crit_threshold = 9 # results 10 or more are crits
     melee = bool(frame is None)
-    passive_tough = tough/2 # convert to passive toughness
+    passive_tough = int(tough/2) # convert to passive toughness
 
     if verbose:
         if melee:
@@ -173,6 +173,7 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
         else:
             hit_df_dmg = df_dmg.copy()
         hit_df_dmg['fraction'] *= hit_fraction
+        hit_df_dmg['result'] -= passive_tough
         # resolve block for melee attacks
         if melee:
             if diff < 1: # successful block
@@ -181,12 +182,12 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
                     hit_df_dmg.loc[hit_df_dmg['result'] <= guard, 'result'] = 0 # superior blocks
                     hit_df_dmg.loc[guard < hit_df_dmg['result'], 'result'] -= protection # regular blocks
                 else:
-                    hit_df_dmg['result'] -= (protection+passive_tough)
+                    hit_df_dmg['result'] -= protection
                 dict_block[str(diff)] = hit_df_dmg
                 str_outcome = f"blocked"
         # resolve cover for ranged attacks
         elif (cover is not None) and (diff <= cover):
-            hit_df_dmg['result'] -= (block+passive_tough)
+            hit_df_dmg['result'] -= block
             dict_cover[str(diff)] = hit_df_dmg
         # resolve armor layers: best protection that is struck
         if 0 < diff: # only resolve armor for connected hits
@@ -196,20 +197,17 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
                 best_layer = best_protection_row['layer']
                 protection = best_protection_row['protection']
                 if 0 < protection:
-                    hit_df_dmg['result'] -= (protection+passive_tough)
+                    hit_df_dmg['result'] -= protection
                     dict_armor[best_layer] = hit_df_dmg
                     str_outcome = f"struck {best_layer}, protection {protection}"
                 else:
-                    hit_df_dmg['result'] -= passive_tough
                     dict_clean[str(diff)] = hit_df_dmg
                     str_outcome = "clean"
             else:
-                hit_df_dmg['result'] -= passive_tough
                 dict_clean[str(diff)] = hit_df_dmg
                 str_outcome = "clean"
         dict_hit_dmg[str(diff)] = hit_df_dmg
         if critical:
-            hit_df_dmg['result'] -= passive_tough
             dict_crit[str(diff)] = hit_df_dmg
             str_outcome = f"{str_outcome} (critical)"
         if verbose:
