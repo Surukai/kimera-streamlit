@@ -146,7 +146,7 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
             dict_cover[str(diff)] = hit_df_dmg
         # resolve armor layers: best protection that is struck
         if 0 < diff: # only resolve armor for connected hits
-            df_layers_struck = df_armor[(diff <= df_armor.coverage) & (0 < df_armor.coverage)]
+            df_layers_struck = df_armor[((diff <= df_armor.coverage) & (0 < df_armor.coverage)) | df_armor.coverage == 0]
             if not df_layers_struck.empty:
                 best_protection_row = df_layers_struck.loc[df_layers_struck['protection'].idxmax()]
                 protection = best_protection_row['protection']
@@ -222,7 +222,7 @@ def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hi
                 'fraction': df_tough['fraction'] * guard_fraction,
                 'result': c_dmg - df_tough['result']})
             # resolve armor layers: best protection that is struck
-            df_layers_struck = df_armor[(diff < df_armor.coverage)]
+            df_layers_struck = df_armor[(diff < df_armor.coverage) | df_armor.coverage == 0]
             if not df_layers_struck.empty:
                 best_protection_row = df_layers_struck.loc[df_layers_struck['protection'].idxmax()]
                 protection = best_protection_row['protection']
