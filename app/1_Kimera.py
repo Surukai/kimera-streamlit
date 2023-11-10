@@ -294,12 +294,13 @@ def report(dict_outcome, defend=False):
         no_effect = df[df['result'] < 0]['fraction'].sum()
         staggered = df[(0 <= df['result']) & (df['result'] < threshold)]['fraction'].sum()
         stopped = df[threshold <= df['result']]['fraction'].sum()
-        st.write(f"Active defense: Offense rating {(stopped+(staggered/2))*100:.2f}% - - - Stopped: {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
-    else:
+        st.write(f"Active defense: Stopped: {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
+    else: # attack
         threshold = 5
-        no_effect = df[df['result'] < threshold]['fraction'].sum()
+        no_effect = df[df['result'] < 1]['fraction'].sum()
+        staggered = df[(1 <= df['result']) & (df['result'] < threshold)]['fraction'].sum()
         stopped = df[threshold <= df['result']]['fraction'].sum()
-        st.write(f"Active attack: Offense rating: {stopped*100:.2f}% - - - ({no_effect*100:.2f}% failure)")
+        st.write(f"Active attack: Stopped: {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
 
     fig.add_shape(go.layout.Shape(type="line", x0=1-defend, x1=1-defend, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='One'))
     fig.add_shape(go.layout.Shape(type="line", x0=threshold, x1=threshold, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough'))
@@ -325,9 +326,10 @@ def compare(dict_dfs):
             df = df_raw.copy()
             if key.startswith('attack'):
                 df['result'] = df['result'] - 1
-            fail = df[df['result'] < 4]['fraction'].sum()
-            stopped = df[4 <= df['result']]['fraction'].sum()
-            st.write(f"{key} outcome: Kill {stopped*100:.2f}% - - - ({fail*100:.2f}% failure), {df['result'].min()} - {df['result'].max()}")
+            no_effect = df[df['result'] < 1]['fraction'].sum()
+            staggered = df[(1 <= df['result']) & (df['result'] < 5)]['fraction'].sum()
+            stopped = df[5 <= df['result']]['fraction'].sum()
+            st.write(f"{key} outcome: Stopped {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
 
             line_color = f'rgba({colors[index][0]}, {colors[index][1]}, {colors[index][2]}, 0.5)'
             fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='lines', name=key, line=dict(color=line_color)))
