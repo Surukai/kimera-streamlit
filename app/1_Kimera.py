@@ -37,6 +37,10 @@ def d_df(*dice): # returns a dataframe with columns (unique)'result', 'count', a
     df = pd.DataFrame({'result': list_unique_results, 'count': list_counts, 'fraction': list_fractions})
     return df
 
+@st.cache_data()
+def d_dict(*dice): # ddf: dict where key conserves the dice rolled
+    return {str(dice): d_df(*dice)}
+
 
 
 # Armor defaults ()
@@ -172,7 +176,7 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
 
 
 
-def defend(df_guard=None, df_tough_block=None, df_dodge=None, df_tough=None, hit=None, dmg=None, crit_dmg=None, df_armor=None, df_frame=None, df_cover=None, distance=0, verbose=False):
+def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hit=None, dmg=None, crit_dmg=None, df_armor=None, df_frame=None, df_cover=None, distance=0, verbose=False):
     '''
     Resolves PC defense (rolled) against an NPC attack (static)
     (params)
@@ -190,7 +194,8 @@ def defend(df_guard=None, df_tough_block=None, df_dodge=None, df_tough=None, hit
     dict_armor = {}
     dict_clean = {}
     dict_crit = {}
-
+    list_d_tough = [int(value) for value in str(list(ddf_tough.keys())[0]).strip('()').split(',') if value]
+    df_tough = list(ddf_tough.values())[0]
     # cycle through GUARD rolls and add the corresponding damage tables to dict(s)
     for row in df_guard.iterrows():
         guard = int(row[1]['result'])
@@ -222,7 +227,14 @@ def defend(df_guard=None, df_tough_block=None, df_dodge=None, df_tough=None, hit
                 best_protection_row = df_layers_struck.loc[df_layers_struck['protection'].idxmax()]
                 protection = best_protection_row['protection']
                 best_layer = best_protection_row['layer']
-                df_dmg_taken['result'] -= protection
+                # reverseengineer toughness roll with added protection
+                list_d = list_d_tough.copy()
+                list_d.append(protection)
+                df_armor_tough = d_df(*list_d)
+                df_dmg_taken = pd.DataFrame({ # damage taken when blocking
+                'count': df_armor_tough['count'],
+                'fraction': df_armor_tough['fraction'] * guard_fraction,
+                'result': dmg - df_armor_tough['result']})
                 dict_armor[best_layer] = df_dmg_taken
             else:
                 dict_clean[str(guard)] = df_dmg_taken
@@ -341,19 +353,21 @@ df_crit['result'] = df_crit['result'] + (crit_dmg-dmg)
 df_guard = d_df(guard, guard)
 df_tough_block = d_df(8, 8, 8)
 df_dodge = d_df(8, 8)
-df_tough = d_df(tough)
+ddf_tough = d_dict(tough)
 df_cover = d_df(8)
 df_frame = d_df(frame*2)
 
 
 ##################### test sequence #####################
 
+df_test = d_df(8, 8, 8)
+
 if test_attack:
     if test_melee:
         dict_attack = attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=8, block=12, verbose=verbose)
 if test_defend:
     if test_melee:
-        dict_defend = defend(df_guard=df_guard, df_tough_block=df_tough_block, df_dodge=df_dodge, df_tough=df_tough, hit=hit, dmg=dmg, crit_dmg=crit_dmg, df_armor=df_armor, df_frame=df_frame, df_cover=df_cover, distance=0, verbose=verbose)
+        dict_defend = defend(df_guard=df_guard, df_tough_block=df_tough_block, df_dodge=df_dodge, ddf_tough=ddf_tough, hit=hit, dmg=dmg, crit_dmg=crit_dmg, df_armor=df_armor, df_frame=df_frame, df_cover=df_cover, distance=0, verbose=verbose)
 
 dict_dfs = {'attack': dict_attack['sum'], 'defend': dict_defend['sum']}
 compare(dict_dfs)
