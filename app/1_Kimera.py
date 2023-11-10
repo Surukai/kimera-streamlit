@@ -11,9 +11,28 @@ def getWeapons(file :str) -> pd.DataFrame:
     # TODO: weapons table as .csv
     return pd.read_csv(file)
 
-
-
 # Dice functions
+KIMERA_DICE = {4, 6, 8, 10, 12}
+
+#@st.cache_data()
+def int2d(value):
+    if value == 14:
+        return [8, 6]
+    elif value == 16:
+        return [8, 8]
+    elif value == 18:
+        return [10, 8]
+    elif value == 20:
+        return [10, 10]
+    elif value == 22:
+        return [12, 10]
+    elif value == 24:
+        return [12, 12]
+    else:
+        if value not in KIMERA_DICE:
+            st.write(f"WARNING! int2d: d{value} is not a Kimera dice")
+        return [value] # return original
+
 @st.cache_data()
 def d(*dice):
     result = 0
@@ -28,7 +47,6 @@ def d_list(*dice): # returns a sorted list of all results possible with *dice
 
 @st.cache_data()
 def d_df(*dice): # returns a dataframe with columns (unique)'result', 'count', and 'fraction'
-    # TODO: check dice vs set of supported dice; break up high numbers into supported dice
     list_results = d_list(*dice)
     list_unique_results = list(set(list_results)) # discard duplicates
     list_counts = [list_results.count(result) for result in list_unique_results] # count occurance of each unique result
@@ -56,23 +74,22 @@ with st.sidebar:
     slide_guard = st.container()
     slide_block = st.container()
     slide_tough = st.container()
-    hit = slide_hit.slider("Hit", 4, 24, 8)
-    dmg = slide_dmg.slider("Damage", 4, 24, 8)
-    guard = slide_guard.slider("Guard", 0, 24, 8)
-    block = slide_block.slider("Block", 0, 24, 12)
-    tough = slide_tough.slider("Tough (def only)", 4, 24, 8)
+    hit = slide_hit.slider("Hit", 4, 24, 8, step=2)
+    dmg = slide_dmg.slider("Damage", 4, 24, 8, step=2)
+    guard = slide_guard.slider("Guard", 0, 24, 8, step=2)
+    block = slide_block.slider("Block", 0, 24, 12, step=2)
+    tough = slide_tough.slider("Tough (def only)", 4, 24, 8, step=2)
 
     l1 = st.container()
     l2 = st.container()
     with l1:
         st.subheader(layer1['layer'])
-        layer1_coverage = st.slider("Coverage 1", 0, 20, layer1['coverage'], key="layer1_coverage")
-        layer1_protection = st.slider("Protection 1", 0, 20, layer1['protection'], key="layer1_protection")
-
+        layer1_coverage = st.slider("Coverage 1", 0, 20, layer1['coverage'], key="layer1_coverage", step=2)
+        layer1_protection = st.slider("Protection 1", 0, 20, layer1['protection'], key="layer1_protection", step=2)
     with l2:
         st.subheader(layer2['layer'])
-        layer2_coverage = st.slider("Coverage 2", 0, 20, layer2['coverage'], key="layer2_coverage")
-        layer2_protection = st.slider("Protection 2", 0, 20, layer2['protection'], key="layer2_protection")
+        layer2_coverage = st.slider("Coverage 2", 0, 20, layer2['coverage'], key="layer2_coverage", step=2)
+        layer2_protection = st.slider("Protection 2", 0, 20, layer2['protection'], key="layer2_protection", step=2)
 
 layer1['coverage'] = layer1_coverage
 layer1['protection'] = layer1_protection
@@ -217,7 +234,6 @@ def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hi
     dict_crit = {}
     list_d_tough = [int(value) for value in str(list(ddf_tough.keys())[0]).strip('()').split(',') if value]
     df_tough = list(ddf_tough.values())[0]
-    st.write(f"toughness {list_d_tough}")
     # cycle through GUARD rolls and add the corresponding damage tables to dict(s)
     for row in df_guard.iterrows():
         guard = int(row[1]['result'])
@@ -381,11 +397,11 @@ df_crit = df_dmg.copy()
 df_crit['result'] = df_crit['result'] + (crit_dmg-dmg)
 
 # PC Defend test (derived parameters)
-df_guard = d_df(guard, guard)
-df_tough_block = d_df(8, 8, 8)
-df_dodge = d_df(8, 8)
-ddf_tough = d_dict(tough)
-df_cover = d_df(8)
+df_guard = d_df(*sum([int2d(guard) for _ in range(2)], []))
+df_tough_block = d_df(*sum([int2d(block), int2d(tough)], []))
+df_dodge = d_df(*sum([int2d(12) for _ in range(2)], []))
+ddf_tough = d_dict(*sum([int2d(tough) for _ in range(2)], []))
+df_cover = d_df(12)
 df_frame = d_df(frame*2)
 
 
