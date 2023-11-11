@@ -94,27 +94,25 @@ def report(dict_outcome, defend=False):
     '''
     fig = go.Figure()  # Plotting
     colors = colorList(len(dict_outcome))
-
+    threshold = 5.5-defend
     df = dict_outcome['sum']
     if defend:
-        threshold = 4
         no_effect = df[df['result'] < 0]['fraction'].sum()
         staggered = df[(0 <= df['result']) & (df['result'] < threshold)]['fraction'].sum()
         stopped = df[threshold <= df['result']]['fraction'].sum()
         st.write(f"Active defense: Stopped: {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
     else: # attack
-        threshold = tough/2+1
         no_effect = df[df['result'] < 1]['fraction'].sum()
         staggered = df[(1 <= df['result']) & (df['result'] < threshold)]['fraction'].sum()
         stopped = df[threshold <= df['result']]['fraction'].sum()
         st.write(f"Active attack: Stopped: {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
 
-    fig.add_shape(go.layout.Shape(type="line", x0=1-defend, x1=1-defend, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='One'))
-    fig.add_shape(go.layout.Shape(type="line", x0=threshold, x1=threshold, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough'))
+    fig.add_shape(go.layout.Shape(type="line", x0=0.5-defend, x1=0.5-defend, xref="x", y0=0, y1=1, yref="paper", line=dict(color="gray", width=2, dash="dash"), name='Stagger'))
+    fig.add_shape(go.layout.Shape(type="line", x0=threshold, x1=threshold, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Out'))
 
     for index, (key, df) in enumerate(dict_outcome.items()):
         if df is not None:
-            if len(df) == 1:
+            if len(df) == 1 or key == 'sum':
                 fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='markers', name=key, marker=dict(color=f'rgba({colors[index][0]}, {colors[index][1]}, {colors[index][2]}, 0.5)')))
             else:
                 line_color = f'rgba({colors[index][0]}, {colors[index][1]}, {colors[index][2]}, 0.5)'
@@ -124,23 +122,23 @@ def report(dict_outcome, defend=False):
 
 def compare(dict_dfs):
     fig = go.Figure() # Plotting
-    colors = colorList(len(dict_dfs))
-
     for index, (key, df_raw) in enumerate(dict_dfs.items()):
         if df_raw is not None:
             df = df_raw.copy()
             if key.startswith('attack'):
                 df['result'] = df['result'] - 1
             no_effect = df[df['result'] < 0]['fraction'].sum()
-            staggered = df[(0 <= df['result']) & (df['result'] < 4)]['fraction'].sum()
-            stopped = df[4 <= df['result']]['fraction'].sum()
+            staggered = df[(0 <= df['result']) & (df['result'] < 5)]['fraction'].sum()
+            stopped = df[5 <= df['result']]['fraction'].sum()
             st.write(f"{key} outcome: Stopped {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
-
-            line_color = f'rgba({colors[index][0]}, {colors[index][1]}, {colors[index][2]}, 0.5)'
-            fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='lines', name=key, line=dict(color=line_color)))
-
-    fig.add_shape(go.layout.Shape(type="line", x0=0, x1=0, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='One'))
-    fig.add_shape(go.layout.Shape(type="line", x0=4, x1=4, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough'))
+            if key == 'attack':
+                color = 'rgba(255, 0, 0, 0.5)'
+            else:
+                color = 'rgba(0, 255, 0, 0.5)'
+            fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='markers', name=key, marker=dict(color=color)))
+            
+    fig.add_shape(go.layout.Shape(type="line", x0=0.5, x1=0.5, xref="x", y0=0, y1=1, yref="paper", line=dict(color="gray", width=2, dash="dash"), name='Stagger'))
+    fig.add_shape(go.layout.Shape(type="line", x0=5.5, x1=5.5, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Out'))
 
     st.plotly_chart(fig) # Show the combined plot
 
