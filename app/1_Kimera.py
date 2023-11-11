@@ -213,7 +213,8 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
                 else:
                     hit_df_dmg['result'] -= protection
                 dict_block[str(diff)] = hit_df_dmg
-                str_outcome = f"blocked"
+                median_dmg = int(hit_df_dmg.loc[hit_df_dmg['fraction'].idxmax()].result)
+                str_outcome = f"blocked: {median_dmg} dmg"
         # resolve cover for ranged attacks
         elif (cover is not None) and (diff <= cover):
             hit_df_dmg['result'] -= block
@@ -228,17 +229,21 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
                 if 0 < protection:
                     hit_df_dmg['result'] -= protection
                     dict_armor[best_layer] = hit_df_dmg
-                    str_outcome = f"struck {best_layer}, protection {protection}"
+                    median_dmg = int(hit_df_dmg.loc[hit_df_dmg['fraction'].idxmax()].result)
+                    str_outcome = f"struck {best_layer}, protection {protection}: {median_dmg} dmg"
                 else:
+                    median_dmg = int(hit_df_dmg.loc[hit_df_dmg['fraction'].idxmax()].result)
                     dict_clean[str(diff)] = hit_df_dmg
-                    str_outcome = "clean"
+                    str_outcome = f"clean: {median_dmg} dmg"
             else:
                 dict_clean[str(diff)] = hit_df_dmg
-                str_outcome = "clean"
+                median_dmg = int(hit_df_dmg.loc[hit_df_dmg['fraction'].idxmax()].result)
+                str_outcome = f"clean: {median_dmg} dmg"
         dict_hit_dmg[str(diff)] = hit_df_dmg
         if critical:
             dict_crit[str(diff)] = hit_df_dmg
-            str_outcome = f"{str_outcome} (critical)"
+            median_dmg = int(hit_df_dmg.loc[hit_df_dmg['fraction'].idxmax()].result)
+            str_outcome = f"{str_outcome} (critical): {median_dmg} dmg"
         if verbose:
             st.write(f"Attack: diff {diff}, {str_outcome}")
     # compile dict of outcomes
@@ -267,11 +272,12 @@ def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hi
         As a typical frame is 5, the typical penalty would be exactly 1/10 of the distance: 6 at 60m, 7 at 70m, etc (minimum of 5).
     Returns a dict of DataFrames with columns 'result', 'count', and 'fraction', describing the outcomes of the attack
     '''
+    # separate ddf_tough into list_d_tough (local tough_dice) and df_tough
     list_d_tough = [int(value) for value in str(list(ddf_tough.keys())[0]).strip('()').split(',') if value]
     df_tough = list(ddf_tough.values())[0]
 
     if verbose:
-        st.write(f"PC defense {df_guard['result'].min()}-{df_guard['result'].max()}, BlockTough {df_tough_block['result'].min()}-{df_tough_block['result'].max()},                 Tough {df_tough['result'].min()}-{df_tough['result'].max()}({int(df_tough['result'].max()/2)})                   . . . vs . . . hit {hit}, dmg {dmg}-{crit_dmg}")
+        st.write(f"PC defense: Guard {df_guard['result'].min()}-{df_guard['result'].max()} vs hit {hit}, BlockTough {df_tough_block['result'].min()}-{df_tough_block['result'].max()} and Tough {df_tough['result'].min()}-{df_tough['result'].max()} vs dmg {dmg}-{crit_dmg}")
     dict_sum = {}
     dict_block = {}
     dict_armor = {}
@@ -288,11 +294,12 @@ def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hi
                 'count': df_tough_block['count'], # fairly pointless column, but needed for merge_dfs
                 'fraction': df_tough_block['fraction'] * guard_fraction,
                 'result': dmg - df_tough_block['result']})
-            str_outcome = "blocked"
+            median_dmg = int(df_dmg_taken.loc[df_dmg_taken['fraction'].idxmax()].result)
+            str_outcome = f"blocked ({block}): {median_dmg} dmg"
             if superblock:
                 if dmg < guard: #superior block
                     df_dmg_taken['result'] = -1
-                    str_outcome = "super blocked"
+                    str_outcome = "super blocked: -1 dmg"
             dict_block[str(guard)] = df_dmg_taken
         else: # connected hit
             if critical:
@@ -319,16 +326,20 @@ def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hi
                     'fraction': df_armor_tough['fraction'] * guard_fraction,
                     'result': c_dmg - df_armor_tough['result']})
                     dict_armor[best_layer] = df_dmg_taken
-                    str_outcome = f"struck {best_layer}, protection {protection}"
+                    median_dmg = int(df_dmg_taken.loc[df_dmg_taken['fraction'].idxmax()].result)
+                    str_outcome = f"struck {best_layer}, protection {protection}: {median_dmg} dmg"
                 else:
                     dict_clean[str(guard)] = df_dmg_taken
-                    str_outcome = "clean"
+                    median_dmg = int(df_dmg_taken.loc[df_dmg_taken['fraction'].idxmax()].result)
+                    str_outcome = f"clean: {median_dmg} dmg"
             else:
                 dict_clean[str(guard)] = df_dmg_taken
-                str_outcome = "clean"
+                median_dmg = int(df_dmg_taken.loc[df_dmg_taken['fraction'].idxmax()].result)
+                str_outcome = f"clean: {median_dmg} dmg"
             if critical:
                 dict_crit[str(guard)] = df_dmg_taken
-                str_outcome = f"{str_outcome} (critical)"
+                median_dmg = int(df_dmg_taken.loc[df_dmg_taken['fraction'].idxmax()].result)
+                str_outcome = f"{str_outcome} (critical): {median_dmg} dmg"
         dict_sum[str(guard)] = df_dmg_taken
         if verbose:
             st.write(f"guard {guard} vs {hit}, {str_outcome}")
@@ -401,7 +412,6 @@ dmg_dice = sum([int2d(dmg) for _ in range(2)], [])
 guard_dice = sum([int2d(guard) for _ in range(2)], [])
 tough_dice = sum([int2d(tough) for _ in range(2)], [])
 block_dice = sum([int2d(block) for _ in range(2)], []) + tough_dice
-st.write(block_dice)
 
 # PC Attack test (derived parameters)
 df_hit = d_df(*hit_dice).rename(columns={'result': 'hit'})
@@ -419,7 +429,7 @@ df_frame = d_df(10)
 
 
 ##################### test sequence #####################
-st.write(f"hit {hit}, dmg {dmg}, guard {guard}, block {block}, tough(a/p) {tough}/{int(tough/2)}")
+st.write(f"hit {hit}, dmg {dmg}, guard {guard}, block {block}, tough {tough}")
 dict_attack = attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=guard, block=block, tough=tough, verbose=verbose)
 dict_defend = defend(df_guard=df_guard, df_tough_block=df_tough_block, df_dodge=df_dodge, ddf_tough=ddf_tough, hit=hit, dmg=dmg, crit_dmg=dmg+crit_bonus, df_armor=df_armor, df_frame=df_frame, df_cover=df_cover, distance=0, verbose=verbose)
 dict_dfs = {'attack': dict_attack['sum'], 'defend': dict_defend['sum']}
