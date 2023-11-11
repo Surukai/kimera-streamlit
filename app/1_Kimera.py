@@ -168,13 +168,12 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
     df_hit = df_hit.copy()
     crit_threshold = 9 # results 10 or more are crits
     melee = bool(frame is None)
-    passive_tough = int(tough/2) # convert to passive toughness
 
     if verbose:
         if melee:
-            st.write(f"melee attack {df_hit['hit'].min()}-{df_hit['hit'].max()}, dmg {df_dmg.result.min()}-{df_crit.result.max()} . . . vs . . . guard {guard}, block {block}, passive tough {passive_tough}")
+            st.write(f"melee attack {df_hit['hit'].min()}-{df_hit['hit'].max()}, dmg {df_dmg.result.min()}-{df_crit.result.max()} . . . vs . . . guard {guard}, block {block}, tough {tough}")
         else:
-            st.write(f"ranged attack {df_hit['hit'].min()}-{df_hit['hit'].max()}, dmg {df_dmg.result.min()}-{df_crit.result.max()} . . . vs . . . frame {frame}, cover {cover}, block {block}, passive tough {passive_tough}, distance {distance}m")
+            st.write(f"ranged attack {df_hit['hit'].min()}-{df_hit['hit'].max()}, dmg {df_dmg.result.min()}-{df_crit.result.max()} . . . vs . . . frame {frame}, cover {cover}, block {block}, tough {tough}, distance {distance}m")
 
     if melee: # resolve guard for melee attack
         df_hit.hit -= guard
@@ -203,7 +202,7 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
         else:
             hit_df_dmg = df_dmg.copy()
         hit_df_dmg['fraction'] *= hit_fraction
-        hit_df_dmg['result'] -= passive_tough
+        hit_df_dmg['result'] -= tough
         # resolve block for melee attacks
         if melee:
             if diff < 1: # successful block
@@ -400,8 +399,9 @@ frame = 5
 hit_dice = sum([int2d(hit) for _ in range(2)], [])
 dmg_dice = sum([int2d(dmg) for _ in range(2)], [])
 guard_dice = sum([int2d(guard) for _ in range(2)], [])
-tough_dice = int2d(tough)
-block_dice = sum([int2d(block) for _ in range(2)], []) + int2d(tough)
+tough_dice = sum([int2d(tough) for _ in range(2)], [])
+block_dice = sum([int2d(block) for _ in range(2)], []) + tough_dice
+st.write(block_dice)
 
 # PC Attack test (derived parameters)
 df_hit = d_df(*hit_dice).rename(columns={'result': 'hit'})
