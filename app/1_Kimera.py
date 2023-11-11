@@ -94,21 +94,15 @@ def report(dict_outcome, defend=False):
     '''
     fig = go.Figure()  # Plotting
     colors = colorList(len(dict_outcome))
-    threshold = 5.5-defend
     df = dict_outcome['sum']
     if defend:
-        no_effect = df[df['result'] < 0]['fraction'].sum()
-        staggered = df[(0 <= df['result']) & (df['result'] < threshold)]['fraction'].sum()
-        stopped = df[threshold <= df['result']]['fraction'].sum()
-        st.write(f"Active defense: Stopped: {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
-    else: # attack
-        no_effect = df[df['result'] < 1]['fraction'].sum()
-        staggered = df[(1 <= df['result']) & (df['result'] < threshold)]['fraction'].sum()
-        stopped = df[threshold <= df['result']]['fraction'].sum()
-        st.write(f"Active attack: Stopped: {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
+        df['result'] = df['result'] + 1 # compensation for damage 0 being a successful attack for defense
+        st.write("Active Defense:")
+    else:
+        st.write("Active Attack:")
 
-    fig.add_shape(go.layout.Shape(type="line", x0=0.5-defend, x1=0.5-defend, xref="x", y0=0, y1=1, yref="paper", line=dict(color="gray", width=2, dash="dash"), name='Stagger'))
-    fig.add_shape(go.layout.Shape(type="line", x0=threshold, x1=threshold, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Out'))
+    fig.add_shape(go.layout.Shape(type="line", x0=0.5, x1=0.5, xref="x", y0=0, y1=1, yref="paper", line=dict(color="gray", width=2, dash="dash"), name='Stagger'))
+    fig.add_shape(go.layout.Shape(type="line", x0=5.5, x1=5.5, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Out'))
 
     for index, (key, df) in enumerate(dict_outcome.items()):
         if df is not None:
@@ -125,13 +119,13 @@ def compare(dict_dfs):
     for index, (key, df_raw) in enumerate(dict_dfs.items()):
         if df_raw is not None:
             df = df_raw.copy()
-            if key.startswith('attack'):
-                df['result'] = df['result'] - 1
+            if key.startswith('Defend'):
+                df['result'] = df['result'] + 1 # compensation for damage 0 being a successful attack for defense
             no_effect = df[df['result'] < 0]['fraction'].sum()
-            staggered = df[(0 <= df['result']) & (df['result'] < 5)]['fraction'].sum()
-            stopped = df[5 <= df['result']]['fraction'].sum()
-            st.write(f"{key} outcome: Stopped {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
-            if key == 'attack':
+            staggered = df[(0 <= df['result']) & (df['result'] < 4)]['fraction'].sum()
+            stopped = df[4 <= df['result']]['fraction'].sum()
+            st.write(f"{key} outcome: Out {stopped*100:.2f}% - Stun {staggered*100:.2f}% - Failure {no_effect*100:.2f}%")
+            if key == 'Attack':
                 color = 'rgba(255, 0, 0, 0.5)'
             else:
                 color = 'rgba(0, 255, 0, 0.5)'
@@ -167,11 +161,10 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
     crit_threshold = 9 # results 10 or more are crits
     melee = bool(frame is None)
 
-    if verbose:
-        if melee:
-            st.write(f"melee attack {df_hit['hit'].min()}-{df_hit['hit'].max()}, dmg {df_dmg.result.min()}-{df_crit.result.max()} . . . vs . . . guard {guard}, block {block}, tough {tough}")
-        else:
-            st.write(f"ranged attack {df_hit['hit'].min()}-{df_hit['hit'].max()}, dmg {df_dmg.result.min()}-{df_crit.result.max()} . . . vs . . . frame {frame}, cover {cover}, block {block}, tough {tough}, distance {distance}m")
+    if melee:
+        st.write(f"PC melee attack: Hit {df_hit['hit'].min()}-{df_hit['hit'].max()} vs Guard {guard}, dmg {df_dmg['result'].min()}-{df_crit['result'].max()} vs BlockTough {block+tough} and Tough {tough}")
+    else:
+        st.write(f"PC ranged attack: ")
 
     if melee: # resolve guard for melee attack
         df_hit.hit -= guard
@@ -274,8 +267,7 @@ def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hi
     list_d_tough = [int(value) for value in str(list(ddf_tough.keys())[0]).strip('()').split(',') if value]
     df_tough = list(ddf_tough.values())[0]
 
-    if verbose:
-        st.write(f"PC defense: Guard {df_guard['result'].min()}-{df_guard['result'].max()} vs hit {hit}, BlockTough {df_tough_block['result'].min()}-{df_tough_block['result'].max()} and Tough {df_tough['result'].min()}-{df_tough['result'].max()} vs dmg {dmg}-{crit_dmg}")
+    st.write(f"PC melee defense: Guard {df_guard['result'].min()}-{df_guard['result'].max()} vs Hit {hit}, BlockTough {df_tough_block['result'].min()}-{df_tough_block['result'].max()} and Tough {df_tough['result'].min()}-{df_tough['result'].max()} vs dmg {dmg}-{crit_dmg}")
     dict_sum = {}
     dict_block = {}
     dict_armor = {}
@@ -402,8 +394,7 @@ test_melee = True
 test_dodge = False
 
 crit_bonus = 10
-frame = 5
-
+frame = 5 # difficulty to hit with ranged attacks, regardless of cover. The smaller the target, the greater the frame value
 
 hit_dice = sum([int2d(hit) for _ in range(2)], [])
 dmg_dice = sum([int2d(dmg) for _ in range(2)], [])
@@ -430,7 +421,7 @@ df_frame = d_df(10)
 st.write(f"hit {hit}, dmg {dmg}, guard {guard}, block {block}, tough {tough}")
 dict_attack = attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=guard, block=block, tough=tough, verbose=verbose)
 dict_defend = defend(df_guard=df_guard, df_tough_block=df_tough_block, df_dodge=df_dodge, ddf_tough=ddf_tough, hit=hit, dmg=dmg, crit_dmg=dmg+crit_bonus, df_armor=df_armor, df_frame=df_frame, df_cover=df_cover, distance=0, verbose=verbose)
-dict_dfs = {'attack': dict_attack['sum'], 'defend': dict_defend['sum']}
+dict_dfs = {'Attack': dict_attack['sum'], 'Defend': dict_defend['sum']}
 compare(dict_dfs)
 report(dict_outcome=dict_attack)
 report(dict_outcome=dict_defend, defend=True)
