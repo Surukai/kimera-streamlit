@@ -11,17 +11,18 @@ def getWeapons(file :str) -> pd.DataFrame:
     # TODO: weapons table as .csv
     return pd.read_csv(file)
 
+dice_mappings = {
+    14: [8, 6],
+    16: [8, 8],
+    18: [10, 8],
+    20: [10, 10],
+    22: [12, 10],
+    24: [12, 12]}
+
 # Dice functions
 
 @st.cache_data()
 def int2d(value):
-    dice_mappings = {
-        14: [8, 6],
-        16: [8, 8],
-        18: [10, 8],
-        20: [10, 10],
-        22: [12, 10],
-        24: [12, 12]}
     list_dice = []
     while value > 24: #add a d12 for every 12 over 24
         value -= 12
@@ -61,45 +62,7 @@ def d_dict(*dice): # ddf: dict where key conserves the dice rolled
     return {str(dice): d_df(*dice)}
 
 
-
-# Armor defaults
-layer1 = {'layer': "armor - Reinforced", 'coverage': 2, 'protection': 0}
-layer2 = {'layer': "armor - Light", 'coverage': 6, 'protection': 0}
-
-
-
-# Sidebar
-with st.sidebar:
-    slide_hit = st.container()
-    slide_dmg = st.container()
-    slide_guard = st.container()
-    slide_block = st.container()
-    slide_tough = st.container()
-    hit = slide_hit.slider("Hit", 4, 36, 8, step=2)
-    dmg = slide_dmg.slider("Damage", 4, 36, 8, step=2)
-    guard = slide_guard.slider("Guard", 0, 36, 8, step=2)
-    block = slide_block.slider("Block", 0, 36, 12, step=2)
-    tough = slide_tough.slider("Tough", 4, 36, 8, step=2)
-
-    l1 = st.container()
-    l2 = st.container()
-    with l1:
-        st.subheader(layer1['layer'])
-        layer1_coverage = st.slider("Coverage 1", 0, 20, layer1['coverage'], key="layer1_coverage", step=2)
-        layer1_protection = st.slider("Protection 1", 0, 20, layer1['protection'], key="layer1_protection", step=2)
-    with l2:
-        st.subheader(layer2['layer'])
-        layer2_coverage = st.slider("Coverage 2", 0, 20, layer2['coverage'], key="layer2_coverage", step=2)
-        layer2_protection = st.slider("Protection 2", 0, 20, layer2['protection'], key="layer2_protection", step=2)
-
-layer1['coverage'] = layer1_coverage
-layer1['protection'] = layer1_protection
-layer2['coverage'] = layer2_coverage
-layer2['protection'] = layer2_protection
-df_armor = pd.DataFrame([layer1, layer2])
-
-
-
+# convenience functions
 def merge_dfs(dict_dfs):
     list_merge = []
     # Iterate dict_dfs and append non-empty DataFrames to list_merge
@@ -116,8 +79,75 @@ def merge_dfs(dict_dfs):
         # Return an empty DataFrame as a placeholder
         return pd.DataFrame(columns=['result', 'count', 'fraction'])
 
+def colorList(num): # generate a spectrum of colors, first one is white
+    first_color = (255, 255, 255)
+    list_colors = [first_color] + [
+        tuple(int(255 * c) for c in colorsys.hsv_to_rgb(i / num, 1, 1))
+        for i in range(num - 1)]
+    return list_colors
 
 
+# Plotting functions
+def report(dict_outcome, defend=False):
+    '''
+    defend flag: active defense is interpreted differently: an active roll has to BEAT the passive; not just equal it
+    '''
+    fig = go.Figure()  # Plotting
+    colors = colorList(len(dict_outcome))
+
+    df = dict_outcome['sum']
+    if defend:
+        threshold = 4
+        no_effect = df[df['result'] < 0]['fraction'].sum()
+        staggered = df[(0 <= df['result']) & (df['result'] < threshold)]['fraction'].sum()
+        stopped = df[threshold <= df['result']]['fraction'].sum()
+        st.write(f"Active defense: Stopped: {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
+    else: # attack
+        threshold = tough/2+1
+        no_effect = df[df['result'] < 1]['fraction'].sum()
+        staggered = df[(1 <= df['result']) & (df['result'] < threshold)]['fraction'].sum()
+        stopped = df[threshold <= df['result']]['fraction'].sum()
+        st.write(f"Active attack: Stopped: {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
+
+    fig.add_shape(go.layout.Shape(type="line", x0=1-defend, x1=1-defend, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='One'))
+    fig.add_shape(go.layout.Shape(type="line", x0=threshold, x1=threshold, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough'))
+
+    for index, (key, df) in enumerate(dict_outcome.items()):
+        if df is not None:
+            if len(df) == 1:
+                fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='markers', name=key, marker=dict(color=f'rgba({colors[index][0]}, {colors[index][1]}, {colors[index][2]}, 0.5)')))
+            else:
+                line_color = f'rgba({colors[index][0]}, {colors[index][1]}, {colors[index][2]}, 0.5)'
+                fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='lines', name=key, line=dict(color=line_color)))
+    st.plotly_chart(fig)
+
+
+def compare(dict_dfs):
+    fig = go.Figure() # Plotting
+    colors = colorList(len(dict_dfs))
+
+    for index, (key, df_raw) in enumerate(dict_dfs.items()):
+        if df_raw is not None:
+            df = df_raw.copy()
+            if key.startswith('attack'):
+                df['result'] = df['result'] - 1
+            no_effect = df[df['result'] < 0]['fraction'].sum()
+            staggered = df[(0 <= df['result']) & (df['result'] < 4)]['fraction'].sum()
+            stopped = df[4 <= df['result']]['fraction'].sum()
+            st.write(f"{key} outcome: Stopped {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
+
+            line_color = f'rgba({colors[index][0]}, {colors[index][1]}, {colors[index][2]}, 0.5)'
+            fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='lines', name=key, line=dict(color=line_color)))
+
+    fig.add_shape(go.layout.Shape(type="line", x0=0, x1=0, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='One'))
+    fig.add_shape(go.layout.Shape(type="line", x0=4, x1=4, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough'))
+
+    st.plotly_chart(fig) # Show the combined plot
+
+
+
+# Attack and Defense functions
+@st.cache_data()
 def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, block=None, tough=None, frame=None, cover=None, distance=0, verbose=False):
     '''
     Resolves PC attack (rolled) vs NPC (static)
@@ -227,7 +257,7 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
     return dict_outcome
 
 
-
+@st.cache_data()
 def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hit=None, dmg=None, crit_dmg=None, df_armor=None, df_frame=None, df_cover=None, distance=0, verbose=False):
     '''
     Resolves PC defense (rolled) against an NPC attack (static)
@@ -317,72 +347,38 @@ def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hi
 
 
 
-def colorList(num): # generate a spectrum of colors, first one is white
-    first_color = (255, 255, 255)
-    list_colors = [first_color] + [
-        tuple(int(255 * c) for c in colorsys.hsv_to_rgb(i / num, 1, 1))
-        for i in range(num - 1)]
-    return list_colors
+# Sidebar
 
+# Armor defaults
+layer1 = {'layer': "armor - Reinforced", 'coverage': 2, 'protection': 0}
+layer2 = {'layer': "armor - Light", 'coverage': 6, 'protection': 0}
 
+with st.sidebar:
+    slide_hit = st.container()
+    slide_dmg = st.container()
+    slide_guard = st.container()
+    slide_block = st.container()
+    slide_tough = st.container()
+    hit = slide_hit.slider("Hit", 4, 36, 8, step=2)
+    dmg = slide_dmg.slider("Damage", 4, 36, 8, step=2)
+    guard = slide_guard.slider("Guard", 0, 36, 8, step=2)
+    block = slide_block.slider("Block", 0, 36, 12, step=2)
+    tough = slide_tough.slider("Tough", 4, 36, 8, step=2)
 
-def report(dict_outcome, defend=False):
-    '''
-    defend flag: active defense is interpreted differently: an active roll has to BEAT the passive; not just equal it
-    '''
-    fig = go.Figure()  # Plotting
-    colors = colorList(len(dict_outcome))
+    l1 = st.container()
+    l2 = st.container()
+    l1.subheader(layer1['layer'])
+    layer1_coverage = l1.slider("Coverage 1", 0, 20, layer1['coverage'], key="layer1_coverage", step=2)
+    layer1_protection = l1.slider("Protection 1", 0, 20, layer1['protection'], key="layer1_protection", step=2)
+    l2.subheader(layer2['layer'])
+    layer2_coverage = l2.slider("Coverage 2", 0, 20, layer2['coverage'], key="layer2_coverage", step=2)
+    layer2_protection = l2.slider("Protection 2", 0, 20, layer2['protection'], key="layer2_protection", step=2)
 
-    df = dict_outcome['sum']
-    if defend:
-        threshold = 4
-        no_effect = df[df['result'] < 0]['fraction'].sum()
-        staggered = df[(0 <= df['result']) & (df['result'] < threshold)]['fraction'].sum()
-        stopped = df[threshold <= df['result']]['fraction'].sum()
-        st.write(f"Active defense: Stopped: {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
-    else: # attack
-        threshold = tough/2+1
-        no_effect = df[df['result'] < 1]['fraction'].sum()
-        staggered = df[(1 <= df['result']) & (df['result'] < threshold)]['fraction'].sum()
-        stopped = df[threshold <= df['result']]['fraction'].sum()
-        st.write(f"Active attack: Stopped: {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
-
-    fig.add_shape(go.layout.Shape(type="line", x0=1-defend, x1=1-defend, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='One'))
-    fig.add_shape(go.layout.Shape(type="line", x0=threshold, x1=threshold, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough'))
-
-    for index, (key, df) in enumerate(dict_outcome.items()):
-        if df is not None:
-            if len(df) == 1:
-                fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='markers', name=key, marker=dict(color=f'rgba({colors[index][0]}, {colors[index][1]}, {colors[index][2]}, 0.5)')))
-            else:
-                line_color = f'rgba({colors[index][0]}, {colors[index][1]}, {colors[index][2]}, 0.5)'
-                fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='lines', name=key, line=dict(color=line_color)))
-
-    st.plotly_chart(fig)
-
-
-
-def compare(dict_dfs):
-    fig = go.Figure() # Plotting
-    colors = colorList(len(dict_dfs))
-
-    for index, (key, df_raw) in enumerate(dict_dfs.items()):
-        if df_raw is not None:
-            df = df_raw.copy()
-            if key.startswith('attack'):
-                df['result'] = df['result'] - 1
-            no_effect = df[df['result'] < 0]['fraction'].sum()
-            staggered = df[(0 <= df['result']) & (df['result'] < 4)]['fraction'].sum()
-            stopped = df[4 <= df['result']]['fraction'].sum()
-            st.write(f"{key} outcome: Stopped {stopped*100:.2f}% - Staggered {staggered*100:.2f}% - ({no_effect*100:.2f}% failure)")
-
-            line_color = f'rgba({colors[index][0]}, {colors[index][1]}, {colors[index][2]}, 0.5)'
-            fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='lines', name=key, line=dict(color=line_color)))
-
-    fig.add_shape(go.layout.Shape(type="line", x0=0, x1=0, xref="x", y0=0, y1=1, yref="paper", line=dict(color="red", width=2, dash="dash"), name='One'))
-    fig.add_shape(go.layout.Shape(type="line", x0=4, x1=4, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Tough'))
-
-    st.plotly_chart(fig) # Show the combined plot
+layer1['coverage'] = layer1_coverage
+layer1['protection'] = layer1_protection
+layer2['coverage'] = layer2_coverage
+layer2['protection'] = layer2_protection
+df_armor = pd.DataFrame([layer1, layer2])
 
 
 
@@ -397,19 +393,25 @@ test_defend = True
 test_melee = True
 test_dodge = False
 
-crit_dmg = dmg + 10
+crit_bonus = 10
 frame = 5
 
+
+hit_dice = sum([int2d(hit) for _ in range(2)], [])
+dmg_dice = sum([int2d(dmg) for _ in range(2)], [])
+guard_dice = sum([int2d(guard) for _ in range(2)], [])
+tough_dice = int2d(tough)
+block_dice = sum([int2d(block) for _ in range(2)], []) + int2d(tough)
+
 # PC Attack test (derived parameters)
-df_hit = d_df(*sum([int2d(hit) for _ in range(2)], [])).rename(columns={'result': 'hit'})
-df_dmg = d_df(*sum([int2d(dmg) for _ in range(2)], []))
-df_crit = df_dmg.copy()
-df_crit['result'] = df_crit['result'] + (crit_dmg-dmg)
+df_hit = d_df(*hit_dice).rename(columns={'result': 'hit'})
+df_dmg = d_df(*dmg_dice)
+df_crit = df_dmg.assign(result=lambda x: x['result'] + (crit_bonus))
 
 # PC Defend test (derived parameters)
-df_guard = d_df(*sum([int2d(guard) for _ in range(2)], []))
-df_tough_block = d_df(*sum([int2d(block) for _ in range(2)], []), *int2d(tough))
-ddf_tough = d_dict(*int2d(tough))
+df_guard = d_df(*guard_dice)
+df_tough_block = d_df(*block_dice)
+ddf_tough = d_dict(*tough_dice)
 # Not used yet
 df_dodge = d_df(*sum([int2d(12) for _ in range(2)], []))
 df_cover = d_df(12)
@@ -419,7 +421,7 @@ df_frame = d_df(10)
 ##################### test sequence #####################
 st.write(f"hit {hit}, dmg {dmg}, guard {guard}, block {block}, tough(a/p) {tough}/{int(tough/2)}")
 dict_attack = attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=guard, block=block, tough=tough, verbose=verbose)
-dict_defend = defend(df_guard=df_guard, df_tough_block=df_tough_block, df_dodge=df_dodge, ddf_tough=ddf_tough, hit=hit, dmg=dmg, crit_dmg=crit_dmg, df_armor=df_armor, df_frame=df_frame, df_cover=df_cover, distance=0, verbose=verbose)
+dict_defend = defend(df_guard=df_guard, df_tough_block=df_tough_block, df_dodge=df_dodge, ddf_tough=ddf_tough, hit=hit, dmg=dmg, crit_dmg=dmg+crit_bonus, df_armor=df_armor, df_frame=df_frame, df_cover=df_cover, distance=0, verbose=verbose)
 dict_dfs = {'attack': dict_attack['sum'], 'defend': dict_defend['sum']}
 compare(dict_dfs)
 report(dict_outcome=dict_attack)
