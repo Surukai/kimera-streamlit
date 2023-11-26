@@ -21,7 +21,7 @@ dice_mappings = {
 
 # Dice functions
 
-@st.cache_data()
+#@st.cache_data()
 def int2d(value):
     list_dice = []
     while value > 24: #add a d12 for every 12 over 24
@@ -35,19 +35,19 @@ def int2d(value):
         list_dice.extend([value])
     return list_dice
 
-@st.cache_data()
+#@st.cache_data()
 def d(*dice):
     result = 0
     for d in dice:
         result += np.random.randint(low=1, high=d)
     return result
 
-@st.cache_data()
+#@st.cache_data()
 def d_list(*dice): # returns a sorted list of all results possible with *dice
     results = [sum(combination) for combination in product(*[range(1, d + 1) for d in dice])]
     return sorted(results)
 
-@st.cache_data()
+#@st.cache_data()
 def d_df(*dice): # returns a dataframe with columns (unique)'result', 'count', and 'fraction'
     list_results = d_list(*dice)
     list_unique_results = list(set(list_results)) # discard duplicates
@@ -57,7 +57,7 @@ def d_df(*dice): # returns a dataframe with columns (unique)'result', 'count', a
     df = pd.DataFrame({'result': list_unique_results, 'count': list_counts, 'fraction': list_fractions})
     return df
 
-@st.cache_data()
+#@st.cache_data()
 def d_dict(*dice): # ddf: dict where key conserves the dice rolled
     return {str(dice): d_df(*dice)}
 
@@ -116,6 +116,7 @@ def report(dict_outcome, defend=False):
 
 def compare(dict_dfs):
     fig = go.Figure() # Plotting
+    colors = colorList(len(dict_dfs))
     for index, (key, df_raw) in enumerate(dict_dfs.items()):
         if df_raw is not None:
             df = df_raw.copy()
@@ -125,11 +126,7 @@ def compare(dict_dfs):
             staggered = df[(0 <= df['result']) & (df['result'] < 4)]['fraction'].sum()
             stopped = df[4 <= df['result']]['fraction'].sum()
             st.write(f"{key} outcome: Out {stopped*100:.2f}% - Stun {staggered*100:.2f}% - Failure {no_effect*100:.2f}%")
-            if key == 'Attack':
-                color = 'rgba(255, 0, 0, 0.5)'
-            else:
-                color = 'rgba(0, 255, 0, 0.5)'
-            fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='markers', name=key, marker=dict(color=color)))
+            fig.add_trace(go.Scatter(x=df['result'], y=df['fraction'], mode='markers', name=key, marker=dict(color=f'rgba({colors[index][0]}, {colors[index][1]}, {colors[index][2]}, 0.5)')))
             
     fig.add_shape(go.layout.Shape(type="line", x0=0.5, x1=0.5, xref="x", y0=0, y1=1, yref="paper", line=dict(color="gray", width=2, dash="dash"), name='Stagger'))
     fig.add_shape(go.layout.Shape(type="line", x0=5.5, x1=5.5, xref="x", y0=0, y1=1, yref="paper", line=dict(color="blue", width=2, dash="dash"), name='Out'))
@@ -139,7 +136,7 @@ def compare(dict_dfs):
 
 
 # Attack and Defense functions
-@st.cache_data()
+#@st.cache_data()
 def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, block=None, tough=None, frame=None, cover=None, distance=0, verbose=False):
     '''
     Resolves PC attack (rolled) vs NPC (static)
@@ -252,7 +249,7 @@ def attack(df_hit=None, df_dmg=None, df_crit=None, df_armor=None, guard=None, bl
     return dict_outcome
 
 
-@st.cache_data()
+#@st.cache_data()
 def defend(df_guard=None, df_tough_block=None, df_dodge=None, ddf_tough=None, hit=None, dmg=None, crit_dmg=None, df_armor=None, df_frame=None, df_cover=None, distance=0, verbose=False):
     '''
     Resolves PC defense (rolled) against an NPC attack (static)
@@ -415,13 +412,18 @@ ddf_tough = d_dict(*tough_dice)
 df_dodge = d_df(*sum([int2d(12) for _ in range(2)], []))
 df_cover = d_df(12)
 df_frame = d_df(10)
+df_standard = d_df(8,8)
+df_standard_crit = df_standard.assign(result=lambda x: x['result'] + (crit_bonus))
 
 
 ##################### test sequence #####################
 st.write(f"hit {hit}, dmg {dmg}, guard {guard}, block {block}, tough {tough}")
 dict_attack = attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=guard, block=block, tough=tough, verbose=verbose)
+#dict_Standard_Standard = attack(df_hit=df_standard, df_dmg=df_standard, df_crit=df_standard_crit, df_armor=df_armor, guard=8, block=12, tough=8, verbose=verbose)
+#dict_Slider_Standard = attack(df_hit=df_hit, df_dmg=df_dmg, df_crit=df_crit, df_armor=df_armor, guard=8, block=12, tough=8, verbose=verbose)
 dict_defend = defend(df_guard=df_guard, df_tough_block=df_tough_block, df_dodge=df_dodge, ddf_tough=ddf_tough, hit=hit, dmg=dmg, crit_dmg=dmg+crit_bonus, df_armor=df_armor, df_frame=df_frame, df_cover=df_cover, distance=0, verbose=verbose)
 dict_dfs = {'Attack': dict_attack['sum'], 'Defend': dict_defend['sum']}
+#dict_dfs = {'Attack_Standard': dict_Standard_Standard['sum'], 'Attack_Slider': dict_Slider_Standard['sum']}
 compare(dict_dfs)
-report(dict_outcome=dict_attack)
-report(dict_outcome=dict_defend, defend=True)
+#report(dict_outcome=dict_attack)
+#report(dict_outcome=dict_defend, defend=True)
