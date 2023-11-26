@@ -5,6 +5,10 @@ import pandas as pd
 import numpy as np
 from itertools import product
 import colorsys
+from kiutils import *
+
+# Ensure session variables are alive
+ini_session()
 
 @st.cache_data()
 def getWeapons(file :str) -> pd.DataFrame:
@@ -381,17 +385,17 @@ df_armor = pd.DataFrame([layer1, layer2])
 
 #################### test parameters ####################
 
-verbose = False
-superblock = False
+verbose = st.session_state.verbose
+superblock = st.session_state.superblock
 
 # test type
-test_attack = True
-test_defend = True
-test_melee = True
-test_dodge = False
+test_attack = st.session_state.test_attack
+test_defend = st.session_state.test_defend
+test_melee = st.session_state.test_melee
+test_dodge = st.session_state.test_dodge
 
-crit_bonus = 10
-frame = 5 # difficulty to hit with ranged attacks, regardless of cover. The smaller the target, the greater the frame value
+crit_bonus = st.session_state.crit_bonus
+frame = st.session_state.frame # difficulty to hit with ranged attacks, regardless of cover. The smaller the target, the greater the frame value
 
 hit_dice = sum([int2d(hit) for _ in range(2)], [])
 dmg_dice = sum([int2d(dmg) for _ in range(2)], [])
